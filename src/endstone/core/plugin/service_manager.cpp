@@ -100,4 +100,15 @@ std::shared_ptr<Service> EndstoneServiceManager::get(std::string name) const
     return nullptr;
 }
 
+std::vector<std::shared_ptr<Service>> EndstoneServiceManager::getProviders(const std::string &name) const
+{
+    std::lock_guard lock(mutex_);
+    std::vector<std::shared_ptr<Service>> result;
+    if (auto it = providers_.find(name); it != providers_.end()) {
+        for (const auto &entry : it->second) {
+            result.push_back(entry.getProvider());
+        }
+    }
+    return result;
+}
 }  // namespace endstone::core

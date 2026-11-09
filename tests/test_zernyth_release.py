@@ -1,0 +1,116 @@
+"""Packaging tests use synthetic data only; no native code, BDS, or downloads."""
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+from types import SimpleNamespace
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location("zernyth_release", ROOT / "scripts/zernyth_release.py")
+release = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(release)
+
+
+class ReleaseTests(unittest.TestCase):
+    def test_ci_cache_not_inside_clean_checkout(self):
+        env = {"CI": "true", "CONAN_HOME": str(ROOT / ".conan2")}
+        with mock.patch.object(release, "java_env", return_value=(env, {})):
+            with self.assertRaisesRegex(ValueError, "preprovisioned CONAN_HOME"):
+                release.build_all(SimpleNamespace(java_home=None))
+    def test_version_and_bounded_profiles(self):
+        self.assertIn("-rc.", release.version())
+        for name in ("smoke", "lifecycle", "bounded-stress", "observation"):
+            self.assertLessEqual(release.profile(name)["cycles"], 50)
+
+    def test_output_scope(self):
+        with self.assertRaises(ValueError):
+            release.workspace(ROOT / "endstone")
+
+    def test_forbidden_paths(self):
+        for name in ("../evil", "/absolute", "root/../evil", "root\\evil", "C:/evil", "root/bedrock_server.exe", "root/private.pdb", "root/__pycache__/private.pyc"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                release.safe_name(name)
+
+    def test_jar_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.jar"
+            with zipfile.ZipFile(path, "w") as jar:
+                jar.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nImplementation-Version: 0.9.0-rc.1\r\nZernyth-Engine-Version: 0.9.0-rc.1\r\n\r\n")
+            self.assertEqual(release.jar_version(path), "0.9.0-rc.1")
+
+    def fixture(self, directory, jar_version=None):
+        stage = directory / "synthetic"
+        stage.mkdir()
+        v, module = "0.9.0-rc.1", "_python.cp315-win_amd64.pyd"
+        for name in release.required_files(v, "Windows", module):
+            path = stage / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"synthetic, never execute")
+        (stage / "VERSION").write_text(v)
+        (stage / "BUILD.json").write_text(json.dumps({"zernyth": v}))
+        for name in (f"java/api-{v}.jar", f"java/runtime-{v}.jar", "examples/HelloZernyth.jar"):
+            with zipfile.ZipFile(stage / name, "w") as jar:
+                value = jar_version or v
+                jar.writestr("META-INF/MANIFEST.MF", f"Implementation-Version: {value}\r\nZernyth-Engine-Version: {value}\r\n\r\n")
+                jar.writestr("dev/zernyth/api/Server.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x45")
+        files = {p.relative_to(stage).as_posix(): release.digest(p) for p in stage.rglob("*") if p.is_file()}
+        (stage / "manifest.json").write_text(json.dumps({"version": v, "platform": "Windows", "pythonModule": module, "files": files}))
+        (stage / "SHA256SUMS").write_text("".join(f"{files[n]}  {n}\n" for n in sorted(files)))
+        return stage
+
+    def test_zip_reproduction_and_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            stage = self.fixture(base)
+            first, second = base / "first.zip", base / "second.zip"
+            release.reproducible_zip(stage, first)
+            release.reproducible_zip(stage, second)
+            self.assertEqual(release.digest(first), release.digest(second))
+            self.assertEqual(release.verify_archive(first)["status"], "PASS")
+            with self.assertRaises(FileExistsError):
+                release.reproducible_zip(stage, first)
+
+    def test_tampering(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            stage = self.fixture(base)
+            (stage / "README.md").write_text("tampered")
+            archive = base / "bad.zip"
+            release.reproducible_zip(stage, archive)
+            with self.assertRaisesRegex(ValueError, "Checksum"):
+                release.verify_archive(archive)
+
+    def test_mixed_version_even_with_updated_checksums(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            stage = self.fixture(base, "0.8.0")
+            archive = base / "mixed.zip"
+            release.reproducible_zip(stage, archive)
+            with self.assertRaisesRegex(ValueError, "JAR version"):
+                release.verify_archive(archive)
+
+    def test_unexpected_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            stage = self.fixture(base)
+            (stage / "unexpected.txt").write_text("unlisted")
+            archive = base / "bad.zip"
+            release.reproducible_zip(stage, archive)
+            with self.assertRaisesRegex(ValueError, "Unexpected"):
+                release.verify_archive(archive)
+
+    def test_zip_traversal_rejected_without_extraction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "bad.zip"
+            with zipfile.ZipFile(archive, "w") as output:
+                output.writestr("root/../evil.txt", "bad")
+            with self.assertRaises(ValueError):
+                release.verify_archive(archive)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -49,7 +49,7 @@ public:
         std::lock_guard lock(mtx_);
         valid_ = false;
         auto &vector =
-            handlers_.emplace(handler->getPriority(), std::vector<std::unique_ptr<EventHandler>>{}).first->second;
+            handlers_.emplace(handler->getPriority(), std::vector<std::shared_ptr<EventHandler>>{}).first->second;
         auto &it = vector.emplace_back(std::move(handler));
         return it.get();
     }
@@ -63,9 +63,9 @@ public:
     {
         std::lock_guard lock(mtx_);
         auto &vector =
-            handlers_.emplace(handler.getPriority(), std::vector<std::unique_ptr<EventHandler>>{}).first->second;
+            handlers_.emplace(handler.getPriority(), std::vector<std::shared_ptr<EventHandler>>{}).first->second;
         const auto it = std::find_if(vector.begin(), vector.end(),
-                                     [&](const std::unique_ptr<EventHandler> &h) { return h.get() == &handler; });
+                                     [&](const std::shared_ptr<EventHandler> &h) { return h.get() == &handler; });
         if (it != vector.end()) {
             valid_ = false;
             vector.erase(it);
@@ -83,7 +83,7 @@ public:
         for (auto &[priority, vector] : handlers_) {
             vector.erase(
                 std::remove_if(vector.begin(), vector.end(),
-                               [&](const std::unique_ptr<EventHandler> &h) { return &h->getPlugin() == &plugin; }),
+                               [&](const std::shared_ptr<EventHandler> &h) { return &h->getPlugin() == &plugin; }),
                 vector.end());
             valid_ = false;
         }
@@ -101,6 +101,15 @@ public:
             bake();
         }
         return baked_handlers_;
+    }
+
+    std::vector<std::shared_ptr<EventHandler>> snapshot() const
+    {
+        std::lock_guard lock(mtx_);
+        std::vector<std::shared_ptr<EventHandler>> result;
+        for (const auto &[priority, handlers] : handlers_)
+            result.insert(result.end(), handlers.begin(), handlers.end());
+        return result;
     }
 
 protected:
@@ -121,7 +130,7 @@ protected:
 
 private:
     mutable std::mutex mtx_;
-    std::map<EventPriority, std::vector<std::unique_ptr<EventHandler>>> handlers_;
+    std::map<EventPriority, std::vector<std::shared_ptr<EventHandler>>> handlers_;
     mutable std::vector<EventHandler *> baked_handlers_;
     mutable bool valid_{false};
     std::string event_;

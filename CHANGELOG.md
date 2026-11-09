@@ -1,3 +1,13 @@
+# Zernyth Engine changelog
+
+## 0.9.0-rc.1 ? unreleased
+
+Java 25 plugins integrated into Endstone: JNI runtime, native-backed gameplay and forms, read-only network metadata, bounded async execution, services, configuration, SDK, and lifecycle hardening. This source candidate is not a stable release. See [validation and open gates](docs/validation.md).
+
+The original Endstone release history is preserved below.
+
+---
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

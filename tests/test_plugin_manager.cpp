@@ -51,3 +51,28 @@ TEST_F(PluginManagerTest, IsEventRegisteredAfterCallWithoutHandlers)
     manager_.callEvent(e);
     EXPECT_FALSE(manager_.isEventRegistered<PacketReceiveEvent>());
 }
+
+namespace {
+class RemovalProbe : public Event {
+public:
+    ENDSTONE_EVENT(RemovalProbe);
+};
+}
+
+TEST_F(PluginManagerTest, ManagedListenerCanRemoveItselfDuringDispatch)
+{
+    int calls=0;
+    EventHandler *handler=nullptr;
+    handler=manager_.registerManagedEvent(RemovalProbe::NAME,[&](Event &) {
+        ++calls;
+        manager_.unregisterManagedEvent(*handler);
+    },EventPriority::Normal,plugin_,false);
+    ASSERT_NE(handler,nullptr);
+    RemovalProbe first;
+    manager_.callEvent(first);
+    EXPECT_EQ(calls,1);
+    EXPECT_FALSE(manager_.isEventRegistered<RemovalProbe>());
+    RemovalProbe second;
+    manager_.callEvent(second);
+    EXPECT_EQ(calls,1);
+}

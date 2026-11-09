@@ -1,0 +1,7 @@
+name: eco_hard
+version: 1.0.0
+main: dev.zernyth.fixture.ecosystem.ConsumerPlugin
+depend: [eco_provider]
+imports: [eco_provider]
+commands:
+  ecohard: {}

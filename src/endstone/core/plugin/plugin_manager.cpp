@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <ranges>
 #include <regex>
@@ -262,8 +263,20 @@ std::vector<Plugin *> EndstonePluginManager::loadPlugins(std::vector<std::string
 
 std::vector<Plugin *> EndstonePluginManager::loadPlugins(std::vector<Plugin *> candidates)
 {
+    std::stable_sort(candidates.begin(), candidates.end(), [](const Plugin *a, const Plugin *b) {
+        if (!a || !b) {
+            return a == nullptr && b != nullptr;
+        }
+        return a->getName() < b->getName();
+    });
     std::vector<Plugin *> result;
-    std::unordered_map<std::string, Plugin *> plugins;
+    std::map<std::string, Plugin *> plugins;
+    std::unordered_map<std::string, int> candidate_counts;
+    for (auto *candidate : candidates) {
+        if (candidate) {
+            ++candidate_counts[candidate->getName()];
+        }
+    }
     std::vector<std::string> loaded_plugins;
     std::unordered_map<std::string, std::string> plugins_provided;
     std::unordered_map<std::string, std::vector<std::string>> dependencies;
@@ -275,6 +288,10 @@ std::vector<Plugin *> EndstonePluginManager::loadPlugins(std::vector<Plugin *> c
         }
 
         const auto &description = candidate->getDescription();
+        if (candidate_counts[description.getName()] > 1 || lookup_names_.contains(description.getName())) {
+            server_.getLogger().error("Rejecting duplicate plugin candidate '{}'.", description.getName());
+            continue;
+        }
 
         // Check if two plugins have the same name
         if (auto it = plugins.find(description.getName()); it != plugins.end()) {
@@ -334,7 +351,7 @@ std::vector<Plugin *> EndstonePluginManager::loadPlugins(std::vector<Plugin *> c
         // Process LoadBefore by adding this plugin as a soft dependency for each target
         for (const auto &load_before : description.getLoadBefore()) {
             if (auto it = soft_dependencies.find(load_before); it != soft_dependencies.end()) {
-                it->second.emplace_back(load_before);
+                it->second.emplace_back(description.getName());
             }
             else {
                 soft_dependencies[load_before] = {description.getName()};
@@ -358,7 +375,8 @@ std::vector<Plugin *> EndstonePluginManager::loadPlugins(std::vector<Plugin *> c
                 auto &deps = dependencies[plugin_name];
                 for (auto dep_it = deps.begin(); dep_it != deps.end();) {
                     const auto &dependency = *dep_it;
-                    if (std::ranges::find(loaded_plugins, dependency) != loaded_plugins.end()) {
+                    if (lookup_names_.contains(dependency) ||
+                        std::ranges::find(loaded_plugins, dependency) != loaded_plugins.end()) {
                         dep_it = deps.erase(dep_it);
                     }
                     else if (!plugins.contains(dependency) && !plugins_provided.contains(dependency)) {
@@ -462,6 +480,13 @@ void EndstonePluginManager::enablePlugin(Plugin &plugin) const
     if (plugin.isEnabled()) {
         return;
     }
+    for (const auto &name : plugin.getDescription().getDepend()) {
+        if (!isPluginEnabled(getPlugin(name))) {
+            plugin.getLogger().error("Cannot enable '{}': required dependency '{}' is not enabled.", plugin.getName(),
+                                     name);
+            return;
+        }
+    }
     if (before_enable_) {
         before_enable_(plugin);
     }
@@ -482,6 +507,23 @@ void EndstonePluginManager::enablePlugins() const
 
 void EndstonePluginManager::disablePlugin(Plugin &plugin)
 {
+    if (!disabling_.insert(&plugin).second) {
+        return;
+    }
+    const auto guard =
+        std::unique_ptr<Plugin, std::function<void(Plugin *)>>(&plugin, [this](Plugin *p) { disabling_.erase(p); });
+    // Resolve aliases through the existing lookup table; disable dependents first.
+    for (auto it = plugins_.rbegin(); it != plugins_.rend(); ++it) {
+        if (*it == &plugin || !(*it)->isEnabled()) {
+            continue;
+        }
+        for (const auto &dependency : (*it)->getDescription().getDepend()) {
+            if (getPlugin(dependency) == &plugin) {
+                disablePlugin(**it);
+                break;
+            }
+        }
+    }
     if (plugin.isEnabled()) {
         plugin.getPluginLoader().disablePlugin(plugin);
         server_.getScheduler().cancelTasks(plugin);
@@ -530,7 +572,7 @@ void EndstonePluginManager::callEvent(Event &event)
     }
 
     auto &handler_list = event_handlers_.emplace(event.getEventName(), event.getEventName()).first->second;
-    for (const auto &handler : handler_list.getHandlers()) {
+    for (const auto &handler : handler_list.snapshot()) {
         auto &plugin = handler->getPlugin();
         if (!plugin.isEnabled()) {
             continue;
@@ -549,19 +591,34 @@ void EndstonePluginManager::callEvent(Event &event)
 void EndstonePluginManager::registerEvent(std::string event, std::function<void(Event &)> executor,
                                           EventPriority priority, Plugin &plugin, bool ignore_cancelled)
 {
+    (void)registerManagedEvent(std::move(event), std::move(executor), priority, plugin, ignore_cancelled);
+}
+
+EventHandler *EndstonePluginManager::registerManagedEvent(std::string event, std::function<void(Event &)> executor,
+                                                          EventPriority priority, Plugin &plugin, bool ignore_cancelled)
+{
     if (!plugin.isEnabled()) {
         server_.getLogger().error("Plugin {} attempted to register listener for event {} while not enabled.",
                                   plugin.getDescription().getFullName(), event);
-        return;
+        return nullptr;
     }
 
     auto &handler_list = event_handlers_.emplace(event, event).first->second;
-    const auto *handler = handler_list.registerHandler(
+    auto *handler = handler_list.registerHandler(
         std::make_unique<EventHandler>(event, executor, priority, plugin, ignore_cancelled));
     if (!handler) {
         server_.getLogger().error("Plugin {} failed to register listener for event {}: Handler type mismatch",
                                   plugin.getDescription().getFullName(), event);
-        return;
+        return nullptr;
+    }
+    return handler;
+}
+
+void EndstonePluginManager::unregisterManagedEvent(EventHandler &handler)
+{
+    auto it = event_handlers_.find(handler.getEventType());
+    if (it != event_handlers_.end()) {
+        it->second.unregister(handler);
     }
 }
 

@@ -23,3 +23,45 @@ __pycache__/
 *.py[cod]
 conan_provider.cmake
 .env
+java/.gradle/
+java/**/build/
+
+# Private development instructions and local agent state
+AGENTS.md
+CLAUDE.md
+.codex/
+.agents/
+
+# Credentials (keep the public environment template)
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local caches and runtime data
+.idea/
+.gradle/
+build/
+target/
+.venv/
+venv/
+cmake-build-*/
+.conan2/
+logs/
+crash-reports/
+test-worlds/
+*.dmp
+
+# Private development evidence and image-generation prompts
+/docs/performance-010/
+/docs/zernyth-validation-*.md
+/docs/zernyth-changes-014.json
+/docs/zernyth-style-changes-014.json
+/docs/zernyth-scope-014.md
+/docs/zernyth-style-014.md
+/docs/zernyth-performance-014.md
+/docs/assets/zernyth/README.md
+/scripts/bds_smoke_004.py
+/scripts/bds-smoke-firewall.ps1

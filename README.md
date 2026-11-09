@@ -1,138 +1,214 @@
-<div align="center">
-  <a href="https://github.com/EndstoneMC/endstone/releases">
-    <img src="https://static.wikia.nocookie.net/minecraft_gamepedia/images/4/43/End_Stone_JE3_BE2.png" alt="Logo" width="80" height="80">
-  </a>
+﻿<div align="center">
 
-<h3>Endstone</h3>
+<img src="docs/assets/zernyth/banner.png" alt="Zernyth Engine — silver and violet geometric Z emblem" width="100%">
 
-<p>
-  <b>High-performance Minecraft Bedrock server software</b><br>
-  Extensible with Python and C++ plugins
-</p>
+# Zernyth Engine
 
-[![Build](https://github.com/EndstoneMC/endstone/actions/workflows/build.yml/badge.svg)](https://github.com/EndstoneMC/endstone/actions/workflows/build.yml)
-[![Minecraft](https://img.shields.io/badge/minecraft-v26.60_(Bedrock)-black)](https://feedback.minecraft.net/hc/en-us/sections/360001186971-Release-Changelogs)
-[![PyPI - Version](https://img.shields.io/pypi/v/endstone)](https://pypi.org/project/endstone)
-[![Python](https://img.shields.io/pypi/pyversions/endstone?logo=python&logoColor=white)](https://www.python.org/)
-[![GitHub License](https://img.shields.io/github/license/endstonemc/endstone)](LICENSE)
-[![Discord](https://img.shields.io/discord/1230982180742631457?logo=discord&logoColor=white&color=5865F2)](https://discord.gg/xxgPuc2XN9)
-[![Hosted By: Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&logoColor=white)](https://cloudsmith.io/~endstone/repos/conan/packages/)
+### Java-first plugins. Native Bedrock foundations.
+
+A Java 25 plugin framework built into Endstone, powered by the original Minecraft Bedrock Dedicated Server.
+
+[![Release candidate](https://img.shields.io/badge/version-0.9.0--rc.1-8B5CF6?style=for-the-badge)](docs/validation.md)
+[![Java](https://img.shields.io/badge/Java-25_LTS-F59E0B?style=for-the-badge)](docs/zernyth-java-25.md)
+[![License](https://img.shields.io/badge/license-Apache_2.0-6366F1?style=for-the-badge)](LICENSE)
+
+**[Get started](#-getting-started)** · **[Developer SDK](#-build-your-first-plugin)** · **[Documentation](#-documentation)** · **[Validation](#-validation-and-compatibility)**
 
 </div>
 
-## Why Endstone?
+---
 
-Bedrock's official addon and script APIs let you add content, but can hardly modify core gameplay. Custom servers like
-PocketMine and Nukkit offer that control, but sacrifice vanilla features. Endstone gives you both: cancellable events,
-packet control, and deep gameplay access with full vanilla compatibility. It's also the fastest way to run a vanilla
-Bedrock server, with over 2x the TPS of BDS under heavy load. Think of it as Paper for Bedrock. If you've ever wished
-Bedrock servers had the same modding power as Java Edition, this is it.
+> [!IMPORTANT]
+> **Release candidate — production approval is pending.** Windows builds, native/JNI tests, and local packaging have passed. Real BDS validation of this RC is blocked until network isolation is demonstrated. Gameplay with a connected Bedrock client, Linux, and Temurin 25 remain unvalidated. See the [complete validation report](docs/validation.md).
 
-## Quick Start
+## ✦ Built for Bedrock. Designed for Java.
 
-Get your server running in seconds:
+Zernyth Engine brings Java plugin development to the existing Endstone architecture. Write plugins against a public Java API while Endstone handles native integration and the original Bedrock Dedicated Server retains responsibility for worlds, gameplay, protocol processing, and transport.
 
-```shell
-pip install endstone
-endstone
+The framework extends Endstone's **existing plugin manager, event infrastructure, and scheduler**. Java plugins run alongside the existing Python and C++ plugin infrastructure, within one native server process and one embedded JVM.
+
+**Java is the plugin development layer. C++ remains the native integration layer. BDS remains the game engine.**
+
+## 🧩 Framework capabilities
+
+| Area | Implemented functionality |
+|---|---|
+| **Plugin lifecycle** | JAR discovery, manifests, dependencies, lifecycle callbacks, owner generations, and cleanup |
+| **Gameplay** | Player, inventory, item, world, dimension, block, and entity APIs; native Bedrock forms |
+| **Events & commands** | Native-backed events, supported synchronous cancellation, typed arguments, subcommands, permissions, and text components |
+| **Task execution** | Server-thread tasks, delayed/repeating tasks, bounded asynchronous execution, virtual threads for suitable I/O, and cooperative cancellation |
+| **Plugin ecosystem** | Isolated classloaders, local JAR libraries, services, YAML/JSON configuration, and plugin data directories |
+| **Networking** | Read-only packet metadata, filtered listeners, priorities, immutable snapshots, and capability checks |
+| **Diagnostics** | Plugin profiling, slow-listener diagnostics, task/resource information, and JVM diagnostics |
+| **Developer tooling** | Java API artifact, sources, Javadocs, local Maven repository, Gradle/Maven examples, and IntelliJ-oriented template |
+
+Implementation does not imply complete real-server validation. Native mocks and JNI integration tests cover controlled scenarios; individual gameplay paths still require a connected-client BDS test.
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TD
+    Plugins[Java plugins] --> API[Zernyth Java 25 API]
+    API --> JNI[Existing JNI bridge]
+    JNI --> Core[Endstone C++ core]
+    Python[Python plugins] --> Core
+    CPP[C++ plugins] --> Core
+    Core --> BDS[Original Bedrock Dedicated Server]
+    BDS --> Game[Native gameplay, worlds and networking]
 ```
 
-Then create your first plugin:
+- **One JVM per process.** Plugin re-enable uses a new owner generation, plugin instance, and classloader within the existing JVM.
+- **Native ownership stays native.** Public APIs do not expose raw C++ pointers; handles and thread affinity are checked by the bridge.
+- **The transport stays with BDS.** Packet observations use existing Endstone hooks above the original transport. Zernyth does not introduce a NetherNet, RakNet, or WebRTC stack.
+- **Lifecycle cleanup is explicit.** Listener, command, task, service, and form resources follow plugin ownership and generation boundaries.
 
-```python
-from endstone.plugin import Plugin
-from endstone.event import event_handler, PlayerJoinEvent
+## 🚀 Getting started
 
+### Requirements
 
-class MyPlugin(Plugin):
-    api_version = "0.10"
+| Component | Requirement |
+|---|---|
+| **Java** | JDK **25 LTS**, without preview features; Eclipse Temurin preferred |
+| **Gradle** | **9.1 or newer**; locally validated with 9.8.2 |
+| **Native build** | CMake **3.29+**, Conan 2, Ninja, and the supported platform toolchain |
+| **Python** | Compatible build dependencies and an ABI matching the native Python module |
+| **BDS baseline** | Separately supplied **1.26.60.6** installation |
+| **Endstone basis** | **0.11.15** |
 
-    def on_enable(self):
-        self.logger.info("MyPlugin enabled!")
-        self.register_events(self)
+All Java modules use toolchain 25 and `options.release = 25`. Older Java runtimes are unsupported. When Temurin is unavailable, an existing JDK 25 may be selected using the documented `-PzernythJavaVendor=any` override. The current local validation used Oracle JDK 25; it does not validate Temurin.
 
-    @event_handler
-    def on_player_join(self, event: PlayerJoinEvent):
-        event.player.send_message(f"Welcome, {event.player.name}!")
+### Build, verify, install
+
+1. Follow the **[build and installation guide](docs/zernyth-release-0.9.md)** to prepare the supported toolchain and existing dependency caches.
+2. Build Java and native artifacts as a matching versioned set. The shared version comes from [`zernyth-version.txt`](zernyth-version.txt).
+3. Run the automated checks and create the local distribution using the documented release driver.
+4. Verify the archive and install into a separate versioned directory. Follow the guide for manual updates and rollback.
+
+The documented offline workflow does not automatically download missing JDKs or dependencies. BDS and the JDK are **not bundled**.
+
+> [!NOTE]
+> `pip install endstone` installs upstream Endstone, not this Zernyth fork. Zernyth requires this fork's matching native components, Java API, and runtime artifacts.
+
+> [!WARNING]
+> Use a separate test instance, a new world, and demonstrable network isolation before BDS testing. Loopback signaling alone does not establish isolation. Archive verification and the default inspection-only launcher do not start a server.
+
+## ☕ Build your first plugin
+
+Start with the **[plugin development template](zernyth-plugin-template/README.md)** or the **[HelloZernyth example](java/example/README.md)**. Open the template in IntelliJ IDEA and select an installed JDK 25.
+
+```java
+package dev.example;
+
+import dev.zernyth.api.plugin.JavaPlugin;
+
+public final class ExamplePlugin extends JavaPlugin {
+    @Override
+    public void onEnable() {
+        getLogger().info("Hello from Zernyth Engine!");
+    }
+
+    @Override
+    public void onDisable() {
+        getLogger().info("Plugin resources are shutting down.");
+    }
+}
 ```
 
-**Get started faster with our templates:**
-[Python](https://github.com/EndstoneMC/python-plugin-template) | [C++](https://github.com/EndstoneMC/cpp-plugin-template)
+`src/main/resources/plugin.yml`:
 
-## Features
-
-- **High performance** - Major optimizations to chunk loading, terrain generation, networking, and more, all without
-  changing vanilla gameplay. Over 2x the TPS of vanilla BDS with 100 players online. See the [benchmarks](BENCHMARK.md).
-
-- **Cross-platform** - Runs natively on both Windows and Linux without emulation, making deployment flexible and
-  straightforward.
-
-- **Always up-to-date** - Designed to stay compatible with the latest Minecraft Bedrock releases so you're never left
-  behind.
-
-- **Python & C++ plugins** - Write plugins in Python for rapid development, or use C++ when you need maximum
-  performance. The choice is yours.
-
-- **Powerful API** - A comprehensive API with 60+ events covering players, blocks, actors, and more. Includes commands,
-  forms, scoreboards, inventories, and a full permission system.
-
-- **Drop-in replacement** - Works with your existing Bedrock worlds and configurations. Just install and run.
-
-- **Familiar to Bukkit developers** - If you've developed plugins for Java Edition servers, you'll feel right at home
-  with Endstone's API design.
-
-## Installation
-
-Requires Python 3.11+ on Windows 10+ or Linux (Ubuntu 22.04+, Debian 12+).
-
-### Using pip (recommended)
-
-```shell
-pip install endstone
-endstone
+```yaml
+name: example_plugin
+version: 1.0.0
+main: dev.example.ExamplePlugin
 ```
 
-### Using Docker
+Use the locally generated SDK repository and declare the API as a compile-time dependency:
 
-```shell
-docker pull endstone/endstone
-docker run --rm -it -p 19132:19132/udp endstone/endstone
+```kotlin
+repositories {
+    maven { url = uri("../java/build/sdk-repository") }
+}
+
+dependencies {
+    compileOnly("dev.zernyth:api:0.9.0-rc.1")
+}
 ```
 
-### Building from source
+The relative repository path above matches the template directory in this source tree; adapt it for other locations. The template includes the Java 25 toolchain configuration. Maven projects can use the same local artifact with `provided` scope; see the SDK guide and template POM. Do not bundle a second copy of the Zernyth API in a plugin JAR.
 
-```shell
-git clone https://github.com/EndstoneMC/endstone.git
-cd endstone
-pip install .
-endstone
-```
+**Threading contract:** native gameplay access must obey the documented server-thread restrictions. Run suitable independent Java work asynchronously and schedule native interactions back onto the permitted thread. Cancellation is cooperative; non-cooperative tasks cannot be safely forced to terminate.
 
-For detailed installation guides, system requirements, and configuration options, see
-our [documentation](https://endstone.dev/).
+## ✅ Validation and compatibility
 
-## Documentation
+The following results are recorded in the **[0.9 RC validation report](docs/validation.md)**. They are prior executed checks, not a new test run for this README update.
 
-Visit [endstone.dev](https://endstone.dev/) for comprehensive guides, API reference, and tutorials.
+| Validation scope | Status | Evidence boundary |
+|---|---|---|
+| Java 25 and Windows native/Python build | **PASS** | Oracle JDK 25; Windows x64 |
+| Native/JNI suite | **PASS** | **249/249** tests |
+| JNI checker | **PASS** | Nine test processes; no reported checker violations |
+| Release infrastructure tests | **PASS** | **10/10** tests |
+| Archived example JARs 0.2–0.8 | **PASS** | Lifecycle regression with the production JNI bridge and native mocks |
+| Packaging, extracted import, SDK template | **PASS** | Local installation and offline template build |
+| Handle-helper ASan/UBSan | **PASS** | Bounded helper only; not the entire core |
+| Windows leak detection | **BLOCKED** | Unsupported by the installed ASan runtime |
+| Real BDS lifecycle for this RC | **BLOCKED** | Network isolation not demonstrated |
+| Connected-client gameplay and packet tests | **NOT TESTED** | Requires an isolated server and compatible Bedrock client |
+| Linux, Temurin 25, full-core sanitizers | **NOT TESTED** | Separate validation remains open |
+| CI execution | **NOT TESTED** | Manual-only workflow prepared; not triggered |
 
-## Contributing
+Other BDS versions are not approved by this RC's compatibility contract. A successful mock test, import, or server startup does not establish complete gameplay compatibility. No TPS, player-capacity, or universal compatibility guarantee is made.
 
-We welcome contributions from the community! Whether it's bug reports, feature requests, or code contributions:
+<details>
+<summary><strong>Scope and security limitations</strong></summary>
 
-- **Found a bug?** Open an [issue](https://github.com/EndstoneMC/endstone/issues)
-- **Want to contribute code?** Submit a [pull request](https://github.com/EndstoneMC/endstone/pulls)
-- **Want to support the project?** [Become a sponsor](https://github.com/sponsors/EndstoneMC)
+- No complete Bukkit/Paper compatibility. The current adapter is a limited porting foundation.
+- No generic raw-packet sending, modification, or cancellation in the Java networking contract.
+- No native dynamic client tab-completion guarantee.
+- Classloader isolation is not a process sandbox. Plugins can still impair the JVM or server process.
+- JNI checks and sanitizer passes do not prove complete memory safety.
+- Full-core sanitizer, platform, long-running, and real-client quality gates remain open.
 
-## License
+</details>
 
-Endstone is licensed under the [Apache-2.0 license](LICENSE).
+## 📚 Documentation
 
-## Acknowledgements
+| Guide | Contents |
+|---|---|
+| [Build, installation & release](docs/zernyth-release-0.9.md) | Offline builds, distribution layout, verification, updates, rollback, and CI prerequisites |
+| [Validation report](docs/validation.md) | Executed tests, artifacts, platform matrix, blockers, and release gates |
+| [Java 25 standard](docs/zernyth-java-25.md) | Toolchains, vendor selection, bytecode, JNI, and CMake |
+| [Security & reliability](docs/zernyth-security-0.8.md) | Input validation, lifetime rules, and regression testing |
+| [Developer API & compatibility](docs/zernyth-developer-0.7.md) | Commands, text components, and porting boundaries |
+| [Runtime & profiling](docs/zernyth-runtime-0.6.md) | Async work, cancellation, limits, metrics, and benchmarks |
+| [Plugin ecosystem & SDK](docs/zernyth-ecosystem-0.5.md) | Classloaders, services, configuration, libraries, and API artifacts |
+| [Networking](docs/zernyth-network-0.4.md) | Read-only packet observations and capability restrictions |
+| [Gameplay](docs/zernyth-advanced-0.3.md) | Native-backed inventory, world, entity, and forms APIs |
+| [Plugin template](zernyth-plugin-template/README.md) | IntelliJ setup, manifest, Gradle/Maven, and troubleshooting |
 
-Endstone is proudly sponsored by [Bisect Hosting](https://bisecthosting.com/endstone), which offers managed Minecraft server hosting.
+Some detailed guides are currently in German. This README provides the English project overview; technical limits in the linked guides continue to apply.
 
-[![Bisect Hosting](docs/assets/bisecthosting-banner.webp)](https://bisecthosting.com/endstone)
+## 🤝 Contributing
 
-Package repository hosting is graciously provided by [Cloudsmith](https://cloudsmith.com), which offers free package management for open-source projects.
+Report Zernyth-specific issues in the **[Zernyth repository](https://github.com/MakisImperium/endstone-zernyth/issues)**. Include the engine version, JDK, operating system, reproduction steps, and sanitized logs. Never include credentials, authentication tokens, or unnecessary player data.
 
-[![Hosted By: Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith)](https://cloudsmith.com)
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before making changes. Extend the existing architecture, preserve Java/Python/C++ compatibility, add reproducible tests for relevant changes, and clearly distinguish mock tests from real BDS validation.
+
+## ⚖️ License and attribution
+
+**Zernyth Engine is distributed under the [Apache License, Version 2.0](LICENSE).**
+
+This project is a fork of **[Endstone](https://github.com/EndstoneMC/endstone)** and includes Endstone code under Apache-2.0. Original copyright, license, and attribution notices are retained. This README has been modified for the Zernyth fork; it does not replace the full license text. Redistribution is subject to the accompanying license, including applicable notice-preservation and modification requirements.
+
+Third-party dependencies may have separate license terms; see [third-party attribution and distribution notes](THIRD_PARTY_NOTICES.md). Minecraft and the Bedrock Dedicated Server are separate from the Apache-licensed Zernyth source and remain subject to their respective owners' terms. Proprietary BDS binaries are not included. The Apache license does not grant rights to third-party trademarks. Software is provided without warranties as set out in the license.
+
+Zernyth is an independent project and is not an official Endstone, Mojang, or Microsoft product. Thank you to the Endstone contributors for the native foundation that makes this framework possible.
+
+---
+
+<div align="center">
+<img src="docs/assets/zernyth/emblem.png" alt="Zernyth geometric Z emblem" width="72">
+<br>
+<strong>Zernyth Engine</strong><br>
+Java-first extensibility · Native Bedrock foundations · Explicit compatibility
+</div>

@@ -1,0 +1,3 @@
+name: lifecycle_benchmark
+version: 0.6.0
+main: dev.zernyth.fixture.LifecycleBenchmarkPlugin

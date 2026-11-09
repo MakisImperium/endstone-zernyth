@@ -1,0 +1,3 @@
+server:
+  name: original
+  max-players: 42

@@ -71,6 +71,8 @@ public:
     void unregister(std::string name, const Service &provider) override;
     void unregister(const Service &provider) override;
     std::shared_ptr<Service> get(std::string name) const override;
+    // Concrete-core inspection used by the Java bridge; no public virtual ABI change.
+    std::vector<std::shared_ptr<Service>> getProviders(const std::string &name) const;
 
 private:
     std::unordered_map<std::string, std::vector<RegisteredServiceProvider>> providers_;

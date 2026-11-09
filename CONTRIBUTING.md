@@ -1,3 +1,11 @@
+# Contributing to Zernyth Engine
+
+Use Java 25 and the existing Endstone architecture. Read the [Zernyth build guide](docs/zernyth-release-0.9.md) and [validation limits](docs/validation.md). Keep changes focused, add reproducible regression tests, and preserve API, lifecycle, threading, and attribution contracts. Do not commit private instructions, credentials, machine-specific paths, server data, or build output. Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
+
+The original Endstone contribution guide is retained below for upstream context; its public publishing workflows are not instructions to publish this fork.
+
+---
+
 # Contributing to Endstone
 
 Thank you for your interest in contributing to Endstone! This document provides guidelines and information to help you

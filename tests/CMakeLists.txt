@@ -33,11 +33,23 @@ add_executable(endstone_test
         test_vector.cpp
 )
 add_dependencies(endstone_test test_plugin)
+if (ENDSTONE_ENABLE_JAVA)
+    find_package(JNI REQUIRED COMPONENTS JVM)
+    target_include_directories(endstone_test PRIVATE ${JNI_INCLUDE_DIRS})
+    target_sources(endstone_test PRIVATE test_java_plugin_loader.cpp test_java_gameplay.cpp test_java_advanced.cpp test_java_network.cpp test_java_ecosystem.cpp test_java_performance.cpp test_java_async.cpp)
+endif ()
 target_link_libraries(endstone_test PRIVATE endstone::core GTest::gtest_main GTest::gmock_main)
 # CppPluginLoaderTest cases share the plugins/.local shadow-copy dir, whose
 # cleanup races when ctest runs them in parallel; serialize just those.
 gtest_discover_tests(endstone_test
+        DISCOVERY_TIMEOUT 30
         TEST_FILTER "CppPluginLoaderTest.*"
         PROPERTIES RESOURCE_LOCK cpp_plugin_loader_local)
 gtest_discover_tests(endstone_test
-        TEST_FILTER "-CppPluginLoaderTest.*")
+        DISCOVERY_TIMEOUT 30
+        TEST_FILTER "-CppPluginLoaderTest.*:Java*")
+if (ENDSTONE_ENABLE_JAVA)
+    # JVM tests also instantiate LoggerFactory. Run alone to avoid log-rotation races
+    # with unrelated test processes that share tests/logs/latest.log.
+    gtest_discover_tests(endstone_test DISCOVERY_TIMEOUT 30 TEST_FILTER "Java*" PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+endif ()

@@ -32,6 +32,7 @@ public:
     bool registerCommand(std::shared_ptr<Command> command) override;
     bool dispatch(CommandSender &sender, std::string command_line) const override;
     void clearCommands() override;
+    void releaseCommand(const std::shared_ptr<Command> &command);
     [[nodiscard]] std::shared_ptr<Command> getCommand(std::string name) const override;
     [[nodiscard]] ::MinecraftCommands &getHandle() const;
 

@@ -1,0 +1,5 @@
+name: eco_provider
+version: 1.0.0
+main: dev.zernyth.fixture.ecosystem.ProviderPlugin
+exports: [dev.zernyth.fixture.shared]
+softdepend: [eco_early]

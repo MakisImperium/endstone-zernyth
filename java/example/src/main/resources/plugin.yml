@@ -1,0 +1,3 @@
+name: hello_zernyth
+version: ${version}
+main: dev.zernyth.example.HelloZernyth

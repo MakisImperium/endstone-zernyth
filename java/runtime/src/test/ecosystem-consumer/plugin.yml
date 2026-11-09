@@ -1,0 +1,10 @@
+name: eco_consumer
+version: 1.0.0
+main: dev.zernyth.fixture.ecosystem.ConsumerPlugin
+softdepend:
+  - eco_provider
+imports: [eco_provider]
+commands:
+  ecotest:
+    permission: ecosystem.use
+    aliases: [ecoalias]

@@ -1,0 +1,4 @@
+name: cycle_a
+version: 1.0.0
+main: dev.zernyth.fixture.ecosystem.ProviderPlugin
+depend: [cycle_b]

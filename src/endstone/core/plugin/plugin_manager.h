@@ -65,6 +65,9 @@ public:
     void registerEvent(std::string event, std::function<void(Event &)> executor, EventPriority priority, Plugin &plugin,
                        bool ignore_cancelled) override;
     [[nodiscard]] bool isEventRegistered(std::string_view event) const;
+    EventHandler *registerManagedEvent(std::string event, std::function<void(Event &)> executor,
+                                      EventPriority priority, Plugin &plugin, bool ignore_cancelled);
+    void unregisterManagedEvent(EventHandler &handler);
 
     template <typename EventType>
     [[nodiscard]] bool isEventRegistered() const
@@ -113,6 +116,7 @@ private:
     std::function<void(Plugin &)> before_enable_;
     std::vector<std::unique_ptr<PluginLoader>> plugin_loaders_;
     std::vector<Plugin *> plugins_;
+    std::unordered_set<Plugin *> disabling_;
     std::unordered_map<std::string, Plugin *> lookup_names_;
     std::unordered_map<std::string, HandlerList, StringHash, std::equal_to<>> event_handlers_;
     std::unordered_map<std::string, std::unique_ptr<Permission>> permissions_;

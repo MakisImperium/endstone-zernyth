@@ -172,6 +172,17 @@ bool EndstoneCommandMap::dispatch(CommandSender &sender, std::string command_lin
     }
 }
 
+void EndstoneCommandMap::releaseCommand(const std::shared_ptr<Command> &command)
+{
+    std::lock_guard lock(mutex_);
+    const auto found = custom_commands_.find(command->getName());
+    if (found == custom_commands_.end() || found->second != command) return;
+    if (attached_) unregisterCommand(command->getName());
+    std::erase_if(custom_commands_, [&](const auto &entry) { return entry.second == command; });
+    std::erase(deferred_commands_, command);
+    command->unregisterFrom(*this);
+}
+
 void EndstoneCommandMap::clearCommands()
 {
     std::lock_guard lock(mutex_);

@@ -1,0 +1,6 @@
+{
+  "smoke": {"cycles": 2, "pauseMillis": 0, "timeoutSeconds": 60, "heapMiB": 256, "rssMiB": 1024, "cpus": 2},
+  "lifecycle": {"cycles": 10, "pauseMillis": 0, "timeoutSeconds": 120, "heapMiB": 256, "rssMiB": 1024, "cpus": 2},
+  "bounded-stress": {"cycles": 25, "pauseMillis": 10, "timeoutSeconds": 180, "heapMiB": 256, "rssMiB": 1024, "cpus": 4},
+  "observation": {"cycles": 50, "pauseMillis": 1000, "timeoutSeconds": 600, "heapMiB": 512, "rssMiB": 1536, "cpus": 4}
+}

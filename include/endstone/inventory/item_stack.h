@@ -28,6 +28,7 @@ namespace endstone {
 
 namespace core {
 class EndstoneItemStack;
+class ItemStackTestFactory;
 }
 
 /**
@@ -181,6 +182,7 @@ public:
 
 private:
     friend class core::EndstoneItemStack;
+    friend class core::ItemStackTestFactory;
 
     class Impl {
     public:

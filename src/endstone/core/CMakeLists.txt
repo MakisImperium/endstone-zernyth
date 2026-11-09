@@ -112,6 +112,29 @@ add_library(endstone_core
         util/uuid.cpp
 )
 add_library(endstone::core ALIAS endstone_core)
+option(ENDSTONE_ENABLE_JAVA "Build optional Zernyth Java 25 LTS JNI support" OFF)
+if (ENDSTONE_ENABLE_JAVA)
+    # Java 25 LTS is the runtime minimum; prefer Eclipse Temurin 25 for development.
+    # Headers only: libjvm is explicitly loaded at runtime, so Java-disabled starts need no JVM.
+    find_package(Java 25 REQUIRED COMPONENTS Development)
+    find_package(JNI REQUIRED COMPONENTS JVM)
+    target_sources(endstone_core PRIVATE plugin/java_plugin_loader.cpp plugin/java_gameplay.cpp plugin/java_advanced.cpp plugin/java_network.cpp plugin/java_ecosystem.cpp plugin/java_performance.cpp)
+    target_include_directories(endstone_core PRIVATE ${JNI_INCLUDE_DIRS})
+    target_compile_definitions(endstone_core PRIVATE ENDSTONE_WITH_JAVA)
+    # Explicit opt-in target. Normal C++ builds never invoke Gradle or download Java artifacts.
+    find_program(ZERNYTH_GRADLE NAMES gradle gradle.bat)
+    set(ZERNYTH_JAVA_VENDOR "temurin" CACHE STRING "Gradle JDK vendor: temurin (preferred) or any (local override)")
+    set_property(CACHE ZERNYTH_JAVA_VENDOR PROPERTY STRINGS temurin any)
+    if (NOT ZERNYTH_JAVA_VENDOR MATCHES "^(temurin|any)$")
+        message(FATAL_ERROR "ZERNYTH_JAVA_VENDOR must be temurin or any")
+    endif ()
+    if (ZERNYTH_GRADLE)
+        add_custom_target(zernyth_java
+            COMMAND ${ZERNYTH_GRADLE} --offline --no-daemon -PzernythJavaVendor=${ZERNYTH_JAVA_VENDOR} :api:jar :runtime:jar :example:jar
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../../java
+            VERBATIM)
+    endif ()
+endif ()
 target_include_directories(endstone_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../)
 target_link_libraries(endstone_core PUBLIC
         bedrock::bedrock

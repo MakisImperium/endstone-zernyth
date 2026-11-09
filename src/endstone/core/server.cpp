@@ -70,6 +70,10 @@
 #include "endstone/core/permissions/default_permissions.h"
 #include "endstone/core/player.h"
 #include "endstone/core/plugin/cpp_plugin_loader.h"
+#ifdef ENDSTONE_WITH_JAVA
+#include "endstone/core/plugin/java_plugin_loader.h"
+#include <cstdlib>
+#endif
 #include "endstone/core/plugin/python_plugin_loader.h"
 #include "endstone/core/registry.h"
 #include "endstone/core/signal_handler.h"
@@ -196,7 +200,15 @@ EndstoneServer::EndstoneServer() : logger_(LoggerFactory::getLogger(""))
     loadPlugins();
 }
 
-EndstoneServer::~EndstoneServer() = default;
+EndstoneServer::~EndstoneServer()
+{
+    // Loaders may own JNI callbacks even for plugins that never reached enable.
+    // Release them while the scheduler, command map and services are still alive.
+    // Member destruction order alone destroys those dependencies before plugin_manager_.
+    if (plugin_manager_) {
+        plugin_manager_->clearPlugins();
+    }
+}
 
 void EndstoneServer::init(ServerInstance &server_instance)
 {
@@ -477,6 +489,12 @@ bool EndstoneServer::dispatchCommand(CommandSender &sender, std::string command_
 void EndstoneServer::loadPlugins()
 {
     plugin_manager_->registerLoader(std::make_unique<CppPluginLoader>(*this));
+#ifdef ENDSTONE_WITH_JAVA
+    if (const auto *enabled = std::getenv("ZERNYTH_JAVA_ENABLED" ); enabled && std::string(enabled) == "1") {
+        plugin_manager_->registerLoader(std::make_unique<JavaPluginLoader>(*this, command_map_.get(),
+            [this](const std::shared_ptr<Command> &command) { command_map_->releaseCommand(command); }));
+    }
+#endif
     plugin_manager_->registerLoader(std::make_unique<PythonPluginLoader>(*this));
 
     auto plugin_dir = fs::current_path() / "plugins";

@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(endstone LANGUAGES CXX)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/zernyth-version.txt" ZERNYTH_ENGINE_VERSION)
+string(STRIP "${ZERNYTH_ENGINE_VERSION}" ZERNYTH_ENGINE_VERSION)
+if (NOT ZERNYTH_ENGINE_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+(-rc\\.[0-9]+)?$")
+    message(FATAL_ERROR "Invalid zernyth-version.txt")
+endif ()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
@@ -47,15 +52,20 @@ option(ENDSTONE_SEPARATE_DEBUG_INFO "Separate debug info into .dbg files on Linu
 
 # Endstone header-only API
 add_subdirectory(include)
+configure_file(cmake/zernyth_version.h.in "${CMAKE_CURRENT_BINARY_DIR}/include/generated/endstone/zernyth_version.h" @ONLY)
 if (NOT CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     return()
 endif ()
 
 # Implementations
+include(cmake/ZernythSanitizers.cmake)
 add_subdirectory(src/endstone/python)
 add_subdirectory(src/bedrock)
 add_subdirectory(src/endstone/core)
 add_subdirectory(src/endstone/runtime)
+get_directory_property(ZERNYTH_ENDSTONE_BASE DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include" DEFINITION ENDSTONE_VERSION_FULL)
+get_directory_property(ZERNYTH_PYTHON_VERSION DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/endstone/python" DEFINITION Python_VERSION)
+configure_file(cmake/zernyth-build.json.in "${CMAKE_CURRENT_BINARY_DIR}/zernyth-build.json" @ONLY)
 
 # Test
 if (NOT BUILD_TESTING STREQUAL OFF)

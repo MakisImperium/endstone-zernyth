@@ -1,0 +1,2 @@
+#pragma once
+#define ZERNYTH_ENGINE_VERSION "@ZERNYTH_ENGINE_VERSION@"

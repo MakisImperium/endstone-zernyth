@@ -1,0 +1,3 @@
+name: gameplay_test
+version: 0.2.0
+main: dev.zernyth.fixture.GameplayPlugin

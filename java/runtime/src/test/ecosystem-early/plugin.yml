@@ -1,0 +1,4 @@
+name: eco_early
+version: 1.0.0
+main: dev.zernyth.fixture.ecosystem.ProviderPlugin
+loadbefore: [eco_provider]

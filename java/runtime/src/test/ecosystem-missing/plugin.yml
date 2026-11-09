@@ -1,0 +1,4 @@
+name: eco_missing
+version: 1.0.0
+main: dev.zernyth.fixture.ecosystem.ProviderPlugin
+depend: [nonexistent]

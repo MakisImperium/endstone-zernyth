@@ -30,7 +30,9 @@ class EndstoneRecipe(ConanFile):
         "spdlog/*:use_std_fmt": True,
     }
 
-    exports_sources = "CMakeLists.txt", "src/*", "include/*", "tests/*"
+    exports_sources = ("CMakeLists.txt", "src/*", "include/*", "tests/*", "cmake/*", "zernyth-version.txt",
+                       "java/*.kts", "java/gradle.properties", "java/api/src/*", "java/api/build.gradle.kts",
+                       "java/runtime/src/*", "java/runtime/build.gradle.kts", "java/example/src/*", "java/example/build.gradle.kts")
 
     @property
     def _min_cppstd(self):

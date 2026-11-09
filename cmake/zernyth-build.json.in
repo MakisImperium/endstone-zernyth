@@ -1,0 +1,13 @@
+{
+  "zernyth": "@ZERNYTH_ENGINE_VERSION@",
+  "endstoneBase": "@ZERNYTH_ENDSTONE_BASE@",
+  "platform": "@CMAKE_SYSTEM_NAME@",
+  "architecture": "@CMAKE_SYSTEM_PROCESSOR@",
+  "compiler": "@CMAKE_CXX_COMPILER_ID@",
+  "compilerVersion": "@CMAKE_CXX_COMPILER_VERSION@",
+  "cmakeVersion": "@CMAKE_VERSION@",
+  "buildType": "@CMAKE_BUILD_TYPE@",
+  "pythonVersion": "@ZERNYTH_PYTHON_VERSION@",
+  "javaEnabled": "@ENDSTONE_ENABLE_JAVA@"
+  ,"sanitizers": "@ZERNYTH_SANITIZERS@"
+}

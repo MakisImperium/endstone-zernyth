@@ -1,0 +1,3 @@
+name: perf_benchmark
+version: 1.0.0
+main: dev.zernyth.fixture.PerformancePlugin

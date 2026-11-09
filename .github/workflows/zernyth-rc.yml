@@ -1,0 +1,90 @@
+name: Zernyth RC validation (manual, offline toolchains)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zernyth-rc-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  java:
+    runs-on: [self-hosted, zernyth-java25]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Offline Java build, unit/fuzz tests and license inventory
+        shell: bash
+        run: |
+          cd java
+          "$ZERNYTH_GRADLE" --offline --no-daemon build :runtime:allTestJars :runtime:thirdPartyLicenses
+  native:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - runner: zernyth-windows-temurin25
+            shell: cmd
+            vendor: temurin
+          - runner: zernyth-windows-oracle25
+            shell: cmd
+            vendor: any
+          - runner: zernyth-linux-temurin25
+            shell: bash
+            vendor: temurin
+          - runner: zernyth-linux-oracle25
+            shell: bash
+            vendor: any
+    runs-on: [self-hosted, '${{ matrix.runner }}']
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build with preinstalled tools and offline dependencies
+        run: python scripts/zernyth_release.py build --vendor ${{ matrix.vendor }}
+      - name: Native and production JNI tests
+        run: python scripts/zernyth_release.py test
+      - name: Bounded repeated lifecycle
+        run: python scripts/zernyth_release.py stability --profile lifecycle
+      - name: Trusted first-party legacy JAR regression (preprovisioned cache required)
+        run: python scripts/zernyth_release.py regression
+      - name: Python packaging and safety checks
+        run: python -m unittest discover -s tests -p test_zernyth_release.py
+      - name: Candidate packaging (no upload, deployment or release)
+        run: python scripts/zernyth_release.py package
+  sanitizer:
+    runs-on: [self-hosted, zernyth-linux-sanitizer]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Bounded ASan UBSan and leak-enabled helper test
+        shell: bash
+        run: |
+          mkdir -p build/sanitizer
+          clang++ -std=c++20 -stdlib=libc++ -g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined -Isrc tests/java_handle_sanitizer.cpp -pthread -o build/sanitizer/handles
+          timeout 30s env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 build/sanitizer/handles
+      - name: Instrument framework code using cached Linux dependencies
+        run: python scripts/zernyth_release.py build --sanitizers address,undefined
+      - name: Native mock tests with leak detection (exclude JVM process-lifetime allocations)
+        shell: bash
+        run: |
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 ctest --test-dir build/RelWithDebInfo --output-on-failure --timeout 60 -E '^Java'
+  static-analysis:
+    runs-on: [self-hosted, zernyth-python]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Syntax and archive-integrity checks (not a C++ security proof)
+        run: |
+          python -m compileall -q scripts/zernyth_release.py scripts/zernyth_bds.py scripts/zernyth_run_existing.py
+          python -m unittest discover -s tests -p test_zernyth_release.py

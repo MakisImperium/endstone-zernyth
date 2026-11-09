@@ -1,0 +1,3 @@
+name: network_peer
+version: 0.4.0
+main: dev.zernyth.fixture.NetworkPlugin
