@@ -1,0 +1,127 @@
+name: Zernyth Alpha wheel (manual)
+run-name: Alpha wheel ${{ inputs.commit }} / ${{ inputs.target }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Reviewed full 40-character release commit SHA
+        required: true
+        type: string
+      target:
+        description: Explicit upload target; environment protection rules also apply
+        type: choice
+        default: build-only
+        options: [build-only, testpypi, pypi]
+
+permissions:
+  contents: read
+concurrency:
+  group: zernyth-alpha-publishing
+  cancel-in-progress: false
+
+jobs:
+  wheel:
+    if: github.repository == 'MakisImperium/endstone-zernyth'
+    runs-on: [self-hosted, Windows, X64, zernyth-publish]
+    timeout-minutes: 60
+    outputs:
+      wheel-sha256: ${{ steps.wheel_digest.outputs.sha256 }}
+    env:
+      RELEASE_COMMIT: ${{ inputs.commit }}
+      RELEASE_TARGET: ${{ inputs.target }}
+      CONAN_HOME: ${{ vars.ZERNYTH_CONAN_HOME }}
+      ZERNYTH_GRADLE: ${{ vars.ZERNYTH_GRADLE }}
+      ZERNYTH_WHEELHOUSE: ${{ vars.ZERNYTH_WHEELHOUSE }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact release commit and production tag
+        shell: pwsh
+        run: python scripts/zernyth_wheel.py release-ref
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build matching native and Java components using offline caches
+        shell: pwsh
+        run: |
+          python -c "import sys; assert sys.version_info[:2] == (3, 15), 'Dedicated runner requires CPython 3.15 x64'"
+          python scripts/zernyth_release.py build --gradle "$env:ZERNYTH_GRADLE" --lockfile config/zernyth-publish-conan.lock
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/zernyth_release.py test
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p 'test_zernyth_*.py'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m pip wheel --no-build-isolation --no-deps --no-index -Cnative-build-dir=build/RelWithDebInfo --wheel-dir dist .
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/zernyth_wheel.py validate --wheel-dir dist --require-sanitized
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/zernyth_wheel.py install-test --wheel-dir dist --wheelhouse "$env:ZERNYTH_WHEELHOUSE"
+          exit $LASTEXITCODE
+      - name: Record the validated wheel digest
+        id: wheel_digest
+        shell: pwsh
+        run: |
+          $wheel = Get-Item dist/zernyth_engine-0.9.0a1-cp315-cp315-win_amd64.whl
+          $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $wheel.FullName).Hash.ToLowerInvariant()
+          "sha256=$digest" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v7
+        with:
+          name: zernyth-alpha-windows-${{ inputs.commit }}
+          path: dist/*.whl
+          if-no-files-found: error
+          retention-days: 7
+
+  testpypi:
+    if: inputs.target == 'testpypi' && github.repository == 'MakisImperium/endstone-zernyth'
+    needs: wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/zernyth-engine
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: zernyth-alpha-windows-${{ inputs.commit }}
+          path: dist
+      - name: Verify the exact validated build artifact
+        env:
+          EXPECTED_SHA256: ${{ needs.wheel.outputs.wheel-sha256 }}
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" 'dist/zernyth_engine-0.9.0a1-cp315-cp315-win_amd64.whl' | sha256sum --check --strict
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+
+  pypi:
+    if: inputs.target == 'pypi' && github.repository == 'MakisImperium/endstone-zernyth'
+    needs: wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/zernyth-engine
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: zernyth-alpha-windows-${{ inputs.commit }}
+          path: dist
+      - name: Verify the exact validated build artifact
+        env:
+          EXPECTED_SHA256: ${{ needs.wheel.outputs.wheel-sha256 }}
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" 'dist/zernyth_engine-0.9.0a1-cp315-cp315-win_amd64.whl' | sha256sum --check --strict
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

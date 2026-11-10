@@ -26,9 +26,7 @@ conan_provider.cmake
 java/.gradle/
 java/**/build/
 
-# Private development instructions and local agent state
-AGENTS.md
-CLAUDE.md
+# Local agent caches
 .codex/
 .agents/
 

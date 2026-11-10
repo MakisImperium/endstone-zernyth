@@ -1,15 +1,18 @@
 [build-system]
-requires = ["conan-py-build>=0.6.1", "setuptools-scm"]
-build-backend = "conan_py_build.build"
+requires = ["packaging==26.3"]
+build-backend = "zernyth_build"
+backend-path = ["packaging"]
 
 [project]
-name = "endstone"
+name = "zernyth-engine"
+version = "0.9.0a1"
 authors = [{ name = "Vincent Wu", email = "magicdroidx@gmail.com" }]
-description = "Endstone offers a plugin API for Bedrock Dedicated Servers, supporting both Python and C++."
-readme = "README.md"
+description = "Java 25 plugin framework integrated into Endstone and the original Bedrock Dedicated Server."
+readme = "packaging/README.md"
 requires-python = ">=3.11"
 keywords = ["plugin", "python", "minecraft", "bedrock"]
-license-files = ["LICENSE"]
+license = "Apache-2.0"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -18,13 +21,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: Microsoft :: Windows",
-    "Operating System :: POSIX :: Linux",
 ]
 dependencies = [
     "aiohttp",
-    "asyncio",
     "click",
     "colorlog",
     "importlib-metadata",
@@ -41,40 +41,19 @@ dependencies = [
     "tomlkit",
     "typing-extensions",
 ]
-dynamic = ["version"]
+
 
 [project.optional-dependencies]
 dev = ["pytest"]
 
 [project.urls]
-Changelog = "https://endstone.dev/latest/changelog"
-Discussions = "https://github.com/orgs/EndstoneMC/discussions"
-Documentation = "https://endstone.dev"
-Homepage = "https://github.com/EndstoneMC/endstone"
-Issues = "https://github.com/EndstoneMC/endstone/issues"
+Changelog = "https://github.com/MakisImperium/endstone-zernyth/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/MakisImperium/endstone-zernyth/blob/main/docs/pypi.md"
+Homepage = "https://github.com/MakisImperium/endstone-zernyth"
+Issues = "https://github.com/MakisImperium/endstone-zernyth/issues"
 
 [project.scripts]
-endstone = "endstone.cli:main"
-
-[tool.conan-py-build]
-extra-arguments = [
-    "-s=&:build_type=RelWithDebInfo",
-    "-c=tools.build:skip_test=True",
-]
-
-[tool.conan-py-build.wheel]
-packages = ["endstone"]
-
-[tool.conan-py-build.sdist]
-include = ["endstone"]
-
-[tool.conan-py-build.version]
-provider = "setuptools_scm"
-
-[tool.setuptools_scm]
-version_file = "endstone/_version.py"
-version_scheme = "guess-next-dev"
-local_scheme = "no-local-version"
+zernyth = "zernyth.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -84,19 +63,5 @@ addopts = ["--ignore=tests/plugin"]
 line-length = 120
 lint.extend-select = ["I", "E", "F"]
 
-[tool.cibuildwheel]
-skip = ["pp*"]
-# uv runs the stub generator; without it the build falls back to the target interpreter.
-before-build = "pip install uv"
-test-command = "pytest {package}/tests --ignore={package}/tests/plugin"
-test-requires = "pytest"
-repair-wheel-command = [
-    "pip install uv",
-    'uv run --script scripts/repair_wheel.py -o endstone -p endstone -w {dest_dir} {wheel}',
-]
-
-[tool.cibuildwheel.linux]
-manylinux-x86_64-image = "ghcr.io/endstonemc/manylinux_2_31_x86_64_clang20"
-environment = { CC = "/usr/bin/clang", CXX = "/usr/bin/clang++" }
-# The runner's ninja is outside the container, and the conan profile needs one on PATH.
-before-build = "pip install ninja uv"
+# Wheels use packaging/zernyth_build.py and the explicit Windows publishing workflow.
+# No cibuildwheel repair/upload hook from upstream is used for this distribution.

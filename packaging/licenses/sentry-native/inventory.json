@@ -1,0 +1,82 @@
+{
+  "source": "sentry-native/0.14.2#8cefda25570037be6b732d26cd746426",
+  "scope": "Dependency source license notices, including optional components; binaries use the Windows Crashpad backend.",
+  "files": [
+    {
+      "path": "external/benchmark/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "external/breakpad/LICENSE",
+      "sha256": "69b3d80c19a460e09716910d54d1ada5d800716e2b73751bebac44352590f646"
+    },
+    {
+      "path": "external/breakpad/src/third_party/curl/COPYING",
+      "sha256": "4d03f91b94e0db3bdc9ddaf0060dd41cc94a2096094fbc1417713a2f059658c7"
+    },
+    {
+      "path": "external/breakpad/src/third_party/libdisasm/LICENSE",
+      "sha256": "d8eaba95b8d03c5912da9b5823de2c920e84a993133039a22fc8100f9edb33a1"
+    },
+    {
+      "path": "external/breakpad/src/third_party/musl/COPYRIGHT",
+      "sha256": "70ca142d257e2690a1f8eda8a296e64a6d1b16d8aee6784f8ddcf67f3163635d"
+    },
+    {
+      "path": "external/crashpad/libunwind/LICENSE.TXT",
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+    },
+    {
+      "path": "external/crashpad/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "external/crashpad/third_party/cpp-httplib/cpp-httplib/LICENSE",
+      "sha256": "4b45cbe16d7b71b89ae6127e26e0d90a029198ca5e958ad8e3d0b8bbed364d8b"
+    },
+    {
+      "path": "external/crashpad/third_party/getopt/LICENSE",
+      "sha256": "f40ee07401827b6ac9cf0aee1aaffb00e42a3f2c729f9c83f96a3daafef5d944"
+    },
+    {
+      "path": "external/crashpad/third_party/lss/lss/LICENSE",
+      "sha256": "63cc54f1d849448b225e71026acd6393390b09418cfad899b9dd453177f35c49"
+    },
+    {
+      "path": "external/crashpad/third_party/mini_chromium/mini_chromium/base/third_party/icu/LICENSE",
+      "sha256": "5d85142a5609ad177a2d7a2e7cae060b886b8b42f25c5b9803cf0cb5ee04ad2f"
+    },
+    {
+      "path": "external/crashpad/third_party/mini_chromium/mini_chromium/LICENSE",
+      "sha256": "12bbc9942399b4014dac7584f3df08afb966ab92157e21e47e6a05db13c04ae0"
+    },
+    {
+      "path": "external/crashpad/third_party/mpack/LICENSE",
+      "sha256": "260ffd3e123c24170cffccdc509ffd9339e71479735c080a3bf7db2da0b9331d"
+    },
+    {
+      "path": "external/crashpad/third_party/xnu/APPLE_LICENSE",
+      "sha256": "e5881019d8766c1e88a5fe1dbca4ba40c78011d41fcb18f6e9f50df60182685b"
+    },
+    {
+      "path": "external/crashpad/third_party/zlib/zlib/LICENSE",
+      "sha256": "e1cfcc55c325b3f78cf55df9664abaa066e2271dffe8213347d9fccdfbac8f2c"
+    },
+    {
+      "path": "external/libunwindstack-ndk/LICENSE",
+      "sha256": "0f464b9afeb93660d9769a7a4641597fa62511bff3c6e0ea71b518126c973cae"
+    },
+    {
+      "path": "external/third_party/lss/LICENSE",
+      "sha256": "63cc54f1d849448b225e71026acd6393390b09418cfad899b9dd453177f35c49"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "5ef07a3d95f1f779c1597c0fbaecbb7ba242128ff0587ed1e3214c7ac6154523"
+    },
+    {
+      "path": "vendor/libunwind/COPYING",
+      "sha256": "6a0dbbdaec2b3136b7bf045586f4212bdf74e7af688bf9dfe9154607cf5ec156"
+    }
+  ]
+}

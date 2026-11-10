@@ -4,3 +4,6 @@
 # Without this, a CRLF checkout flips to LF on each build and shows up as
 # phantom modifications.
 *.pyi text eol=lf
+
+# Original notice bytes, line endings and trailing blank lines are part of the hash inventory.
+/packaging/licenses/** -text -whitespace

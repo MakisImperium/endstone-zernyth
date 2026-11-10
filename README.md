@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 <img src="docs/assets/zernyth/banner.png" alt="Zernyth Engine — silver and violet geometric Z emblem" width="100%">
 
@@ -8,7 +8,7 @@
 
 A Java 25 plugin framework built into Endstone, powered by the original Minecraft Bedrock Dedicated Server.
 
-[![Release candidate](https://img.shields.io/badge/version-0.9.0--rc.1-8B5CF6?style=for-the-badge)](docs/validation.md)
+[![Alpha](https://img.shields.io/badge/version-0.9.0--alpha.1-8B5CF6?style=for-the-badge)](docs/pypi.md)
 [![Java](https://img.shields.io/badge/Java-25_LTS-F59E0B?style=for-the-badge)](docs/zernyth-java-25.md)
 [![License](https://img.shields.io/badge/license-Apache_2.0-6366F1?style=for-the-badge)](LICENSE)
 
@@ -79,6 +79,10 @@ All Java modules use toolchain 25 and `options.release = 25`. Older Java runtime
 
 ### Build, verify, install
 
+Python distribution: **`zernyth-engine==0.9.0a1`**, command **`zernyth`**. The first wheel targets Windows x64 / CPython 3.15 and replaces `endstone` in a separate virtual environment. Do not install both packages together. See the [wheel and manual publishing guide](docs/pypi.md); no package upload has been performed in this development phase.
+
+The [Alpha packaging report](docs/pypi-validation.md) records successful installation, native-path sanitization and regression tests. Upload approval remains separate from those local checks.
+
 1. Follow the **[build and installation guide](docs/zernyth-release-0.9.md)** to prepare the supported toolchain and existing dependency caches.
 2. Build Java and native artifacts as a matching versioned set. The shared version comes from [`zernyth-version.txt`](zernyth-version.txt).
 3. Run the automated checks and create the local distribution using the documented release driver.
@@ -130,7 +134,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("dev.zernyth:api:0.9.0-rc.1")
+    compileOnly("dev.zernyth:api:0.9.0-alpha.1")
 }
 ```
 

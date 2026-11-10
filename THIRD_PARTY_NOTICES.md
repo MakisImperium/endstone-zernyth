@@ -16,17 +16,38 @@ The locally available POM metadata declares:
 | Gson | 2.14.0 | Apache-2.0 |
 | SnakeYAML | 2.4 | Apache-2.0 |
 
-These are dependency declarations, not a complete redistribution inventory.
-The current generated Java license directory contains POM metadata but no
-standalone license or notice texts from these JARs. Before distributing compiled
-runtime artifacts, assemble and review the applicable license texts, copyrights,
-and any required notices. Do not treat a successful packaging command as legal
-clearance. Native dependencies also require review of the cached Conan package
-license inventory; this source-preparation step does not certify that inventory.
+The wheel includes each dependency's original POM (including its existing
+copyright notices), all license/notice files extracted by the Java build, and
+the complete Apache-2.0 text for each dependency under `zernyth/licenses/java`.
+Native dependency license files are copied from the matching cached Conan graph
+under `zernyth/licenses/native`, with a path-free inventory. Missing native
+license directories fail packaging. `opengl/system` identifies an operating
+system component and is not bundled. These checks establish file presence,
+not independent legal certification of every transitive dependency.
 
 Build and test tools have their own license terms. See `conanfile.py`,
 `java/runtime/build.gradle.kts`, and accompanying dependency materials for the
 actual dependency definitions. No dependency binaries are committed here.
+
+The wheel also includes 19 original Sentry/Crashpad source license and copyright
+files under `zernyth/licenses/sentry-source-notices`. Its inventory records their
+source recipe and SHA-256 hashes, covering nested Mini Chromium, ICU, zlib, mpack,
+getopt and other dependency notices.
+
+The Windows build uses Cpptrace's DbgHelp backend. Packaging verifies its linker
+map and rejects linked libdwarf objects or symbols. The Conan recipe graph still
+lists libdwarf and its license materials are included conservatively. The wheel
+contains a path-free Windows linkage audit. Python dependencies are installed as
+separate distributions and retain the license files in their own wheels.
+
+## Bundled font
+
+The unmodified JetBrains Mono font retains its embedded copyright:
+Copyright 2020 The JetBrains Mono Project Authors
+(https://github.com/JetBrains/JetBrainsMono). The wheel places its complete SIL
+Open Font License 1.1 alongside it at `endstone/fonts/OFL.txt`. The source copy
+is `packaging/licenses/JetBrainsMono-OFL.txt`, obtained from the font project's
+`OFL.txt` (Git blob `5ceee0025da23d2cd5fd14b28569708a8db4db2b`).
 
 ## Minecraft and BDS
 

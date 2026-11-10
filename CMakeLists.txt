@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.15)
 project(endstone LANGUAGES CXX)
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/zernyth-version.txt" ZERNYTH_ENGINE_VERSION)
 string(STRIP "${ZERNYTH_ENGINE_VERSION}" ZERNYTH_ENGINE_VERSION)
-if (NOT ZERNYTH_ENGINE_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+(-rc\\.[0-9]+)?$")
+if (NOT ZERNYTH_ENGINE_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|alpha)\\.[0-9]+)?$")
     message(FATAL_ERROR "Invalid zernyth-version.txt")
 endif ()
 
@@ -46,6 +46,7 @@ if (NOT CMAKE_GENERATOR MATCHES "^Ninja")
 endif ()
 
 # Options
+include(cmake/ZernythBuildPaths.cmake)
 option(CODE_COVERAGE "Enable code coverage reporting" OFF)
 option(ENDSTONE_ENABLE_DEVTOOLS "Build Endstone with DevTools enabled." OFF)
 option(ENDSTONE_SEPARATE_DEBUG_INFO "Separate debug info into .dbg files on Linux using objcopy" OFF)

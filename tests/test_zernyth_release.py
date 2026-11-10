@@ -22,7 +22,7 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "preprovisioned CONAN_HOME"):
                 release.build_all(SimpleNamespace(java_home=None))
     def test_version_and_bounded_profiles(self):
-        self.assertIn("-rc.", release.version())
+        self.assertRegex(release.version(), r"-(?:rc|alpha)\.\d+$")
         for name in ("smoke", "lifecycle", "bounded-stress", "observation"):
             self.assertLessEqual(release.profile(name)["cycles"], 50)
 

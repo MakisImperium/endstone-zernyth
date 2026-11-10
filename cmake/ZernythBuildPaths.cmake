@@ -1,0 +1,17 @@
+# Remove personal source/debug paths at compile/link time, never by editing PE bytes.
+option(ZERNYTH_SANITIZE_BUILD_PATHS "Map native build paths for redistributable artifacts" ON)
+if (WIN32 AND ZERNYTH_SANITIZE_BUILD_PATHS)
+    if (NOT DEFINED ENV{USERPROFILE} OR "$ENV{USERPROFILE}" STREQUAL "")
+        message(FATAL_ERROR "USERPROFILE is required for Windows build-path mapping")
+    endif ()
+    set(_zernyth_profile "$ENV{USERPROFILE}")
+    file(TO_CMAKE_PATH "${_zernyth_profile}" _zernyth_profile_forward)
+    foreach (_zernyth_prefix IN ITEMS "${_zernyth_profile}" "${_zernyth_profile_forward}")
+        add_compile_options("/clang:-ffile-prefix-map=${_zernyth_prefix}=/zernyth")
+        add_compile_options("/clang:-fdebug-prefix-map=${_zernyth_prefix}=/zernyth")
+    endforeach ()
+    # The linker expands this documented placeholder to the PDB basename.
+    add_link_options("/PDBALTPATH:%_PDB%")
+    # Retained outside the wheel for auditing which static-library objects were linked.
+    add_link_options("/MAP")
+endif ()

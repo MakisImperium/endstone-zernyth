@@ -27,8 +27,8 @@ FIXTURES = {"ZERNYTH_GAMEPLAY_TEST_JAR": "integration", "ZERNYTH_GAMEPLAY_FAILUR
 
 def version():
     value = (ROOT / "zernyth-version.txt").read_text(encoding="utf-8").strip()
-    if not re.fullmatch(r"\d+\.\d+\.\d+-rc\.\d+", value):
-        raise ValueError("RC version required")
+    if not re.fullmatch(r"\d+\.\d+\.\d+-(?:rc|alpha)\.\d+", value):
+        raise ValueError("RC or alpha version required")
     return value
 
 
@@ -125,23 +125,33 @@ def build_all(args):
     lock = RESULTS / "conan.lock"
     command = conan + ["install", ".", "--no-remote", "--build=never", "-s", "&:build_type=RelWithDebInfo",
                        "--lockfile-out=" + str(lock)]
-    if lock.exists():
-        command += ["--lockfile=" + str(lock)]
+    profiles = (["-pr:h", "default", "-pr:h", str(ROOT / "config/conan/windows-sanitized.profile")]
+                if os.name == "nt" else [])
+    command += profiles
+    input_lock = getattr(args, "lockfile", None) or (lock if lock.exists() else None)
+    if input_lock:
+        command += ["--lockfile=" + str(Path(input_lock).resolve())]
     run(command, env=env)
     graph = run(conan + ["graph", "info", ".", "--no-remote", "--format=json", "-s", "&:build_type=RelWithDebInfo",
-                         "--lockfile=" + str(lock)], env=env, capture=True)
+                         "--lockfile=" + str(lock)] + profiles, env=env, capture=True)
     graph_data = json.loads(graph.stdout)
     for node in graph_data["graph"]["nodes"].values():
         if node.get("binary") == "Cache" and node.get("prev") and node.get("package_id"):
             reference = f'{node["ref"]}:{node["package_id"]}#{node["prev"]}'
             node["package_folder"] = run(conan + ["cache", "path", reference], env=env, capture=True).stdout.strip()
     (RESULTS / "dependency-graph.json").write_text(json.dumps(graph_data, indent=2), encoding="utf-8")
+    native_runtime_arguments = []
+    if os.name == "nt":
+        sentry = next(node for node in graph_data["graph"]["nodes"].values()
+                      if str(node.get("ref", "")).startswith("sentry-native/") and node.get("package_folder"))
+        # Conan's CACHE variable alone retains a previous package revision on reconfigure.
+        native_runtime_arguments = ["-DSENTRY_NATIVE_BIN_DIR=" + (Path(sentry["package_folder"]) / "bin").as_posix()]
     run([gradle, "--offline", "--no-daemon", f"-PzernythJavaVendor={args.vendor}", "build", ":runtime:allTestJars",
          ":runtime:thirdPartyLicenses", ":api:publishApiPublicationToSdkRepository"], cwd=ROOT / "java", env=env)
     run([cmake, "--preset", "conan-relwithdebinfo", "-DENDSTONE_ENABLE_JAVA=ON", "-DENDSTONE_GENERATE_STUBS=OFF",
          "-DFETCHCONTENT_FULLY_DISCONNECTED=ON", "-DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST",
          f"-DZERNYTH_SANITIZERS={args.sanitizers}",
-         f"-DZERNYTH_GRADLE={gradle}", f"-DZERNYTH_JAVA_VENDOR={args.vendor}", f"-DPython_EXECUTABLE={sys.executable}"], env=env)
+         f"-DZERNYTH_GRADLE={gradle}", f"-DZERNYTH_JAVA_VENDOR={args.vendor}", f"-DPython_EXECUTABLE={sys.executable}"] + native_runtime_arguments, env=env)
     run([cmake, "--build", str(args.build_dir), "--target", "zernyth_java"], env=env)
     run([cmake, "--build", str(args.build_dir), "--parallel", str(args.jobs)], env=env)
     metadata = check_artifacts(args.build_dir)
@@ -327,7 +337,7 @@ def verify_archive(path):
             return archive.read(item)
         manifest = json.loads(read("manifest.json"))
         v = read("VERSION").decode().strip()
-        if v != manifest["version"] or not re.fullmatch(r"\d+\.\d+\.\d+-rc\.\d+", v):
+        if v != manifest["version"] or not re.fullmatch(r"\d+\.\d+\.\d+-(?:rc|alpha)\.\d+", v):
             raise ValueError("Package version mismatch")
         files = manifest["files"]
         actual = {n[len(prefix):] for n in names}
@@ -490,6 +500,7 @@ def main():
     parser.add_argument("--cmake")
     parser.add_argument("--ctest")
     parser.add_argument("--conan")
+    parser.add_argument("--lockfile", type=Path, help="Explicit reviewed input Conan lockfile")
     parser.add_argument("--vendor", choices=("temurin", "any"), default="temurin")
     parser.add_argument("--sanitizers", choices=("", "address,undefined"), default="")
     parser.add_argument("--build-dir", type=Path, default=ROOT / "build/RelWithDebInfo")
