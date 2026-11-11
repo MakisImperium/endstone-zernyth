@@ -125,6 +125,10 @@ runner labelled `self-hosted`, `Windows`, `X64`, `zernyth-publish`, with:
 - Repository variables `ZERNYTH_GRADLE` (installed Gradle executable),
   `ZERNYTH_CONAN_HOME` (provisioned cache **outside** the checkout), and
   `ZERNYTH_WHEELHOUSE` (complete trusted Windows dependency wheels).
+- Optional `ZERNYTH_TOOL_PATHS` supplies semicolon-separated directories for
+  installed Python, Conan, LLVM, CMake and Ninja tools. These are added to the
+  individual job's PATH. The CI build invokes Conan from the checkout parent
+  with explicit recipe/output paths so `.conanrc` cannot replace the supplied cache.
 - Conan profiles and the recipe/package revisions in the checked-in Windows lock.
 - Existing Gradle dependency caches. No dependency compilation/download fallback
   is allowed by the native build driver.

@@ -122,8 +122,12 @@ def build_all(args):
     gradle, cmake = tool("gradle", args.gradle), tool("cmake", args.cmake)
     RESULTS.mkdir(parents=True, exist_ok=True)
     conan = [tool("conan", args.conan)]
+    # Conan gives a checkout's .conanrc precedence over CONAN_HOME. CI runs from
+    # the checkout parent with an explicit recipe/output path to use its supplied cache.
+    conan_cwd = ROOT.parent if env.get("CI", "").lower() == "true" else ROOT
     lock = RESULTS / "conan.lock"
-    command = conan + ["install", ".", "--no-remote", "--build=never", "-s", "&:build_type=RelWithDebInfo",
+    command = conan + ["install", str(ROOT), "--output-folder=" + str(ROOT),
+                       "--no-remote", "--build=never", "-s", "&:build_type=RelWithDebInfo",
                        "--lockfile-out=" + str(lock)]
     profiles = (["-pr:h", "default", "-pr:h", str(ROOT / "config/conan/windows-sanitized.profile")]
                 if os.name == "nt" else [])
@@ -131,14 +135,14 @@ def build_all(args):
     input_lock = getattr(args, "lockfile", None) or (lock if lock.exists() else None)
     if input_lock:
         command += ["--lockfile=" + str(Path(input_lock).resolve())]
-    run(command, env=env)
-    graph = run(conan + ["graph", "info", ".", "--no-remote", "--format=json", "-s", "&:build_type=RelWithDebInfo",
-                         "--lockfile=" + str(lock)] + profiles, env=env, capture=True)
+    run(command, cwd=conan_cwd, env=env)
+    graph = run(conan + ["graph", "info", str(ROOT), "--no-remote", "--format=json", "-s", "&:build_type=RelWithDebInfo",
+                         "--lockfile=" + str(lock)] + profiles, cwd=conan_cwd, env=env, capture=True)
     graph_data = json.loads(graph.stdout)
     for node in graph_data["graph"]["nodes"].values():
         if node.get("binary") == "Cache" and node.get("prev") and node.get("package_id"):
             reference = f'{node["ref"]}:{node["package_id"]}#{node["prev"]}'
-            node["package_folder"] = run(conan + ["cache", "path", reference], env=env, capture=True).stdout.strip()
+            node["package_folder"] = run(conan + ["cache", "path", reference], cwd=conan_cwd, env=env, capture=True).stdout.strip()
     (RESULTS / "dependency-graph.json").write_text(json.dumps(graph_data, indent=2), encoding="utf-8")
     native_runtime_arguments = []
     if os.name == "nt":

@@ -33,12 +33,23 @@ jobs:
       CONAN_HOME: ${{ vars.ZERNYTH_CONAN_HOME }}
       ZERNYTH_GRADLE: ${{ vars.ZERNYTH_GRADLE }}
       ZERNYTH_WHEELHOUSE: ${{ vars.ZERNYTH_WHEELHOUSE }}
+      ZERNYTH_TOOL_PATHS: ${{ vars.ZERNYTH_TOOL_PATHS }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.commit }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Add preinstalled Windows build tools to the job PATH
+        shell: pwsh
+        run: |
+          foreach ($directory in ($env:ZERNYTH_TOOL_PATHS -split ';')) {
+            if ([string]::IsNullOrWhiteSpace($directory)) { continue }
+            if (!(Test-Path -LiteralPath $directory -PathType Container)) {
+              throw "Configured tool directory does not exist: $directory"
+            }
+            $directory >> $env:GITHUB_PATH
+          }
       - name: Verify exact release commit and production tag
         shell: pwsh
         run: python scripts/zernyth_wheel.py release-ref

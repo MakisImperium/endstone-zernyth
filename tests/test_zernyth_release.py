@@ -21,6 +21,31 @@ class ReleaseTests(unittest.TestCase):
         with mock.patch.object(release, "java_env", return_value=(env, {})):
             with self.assertRaisesRegex(ValueError, "preprovisioned CONAN_HOME"):
                 release.build_all(SimpleNamespace(java_home=None))
+
+    def test_ci_conan_uses_supplied_cache_outside_checkout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            graph = {"graph": {"nodes": {"1": {"ref": "sentry-native/0.14.2",
+                                              "package_folder": str(base / "cache/package")}}}}
+            environment = {"CI": "true", "CONAN_HOME": str(base / "cache")}
+            args = SimpleNamespace(java_home=None, gradle=None, cmake=None, conan=None,
+                                   vendor="temurin", sanitizers="", jobs=4, build_dir=ROOT / "build/RelWithDebInfo")
+
+            def result(command, **kwargs):
+                return SimpleNamespace(stdout=json.dumps(graph) if command[1:3] == ["graph", "info"] else "")
+
+            with mock.patch.object(release, "java_env", return_value=(environment, {})), \
+                    mock.patch.object(release, "tool", side_effect=lambda name, explicit=None: name), \
+                    mock.patch.object(release, "RESULTS", base / "results"), \
+                    mock.patch.object(release, "run", side_effect=result) as run, \
+                    mock.patch.object(release, "check_artifacts", return_value={}):
+                release.build_all(args)
+            conan_calls = [call for call in run.call_args_list if call.args[0][0] == "conan"]
+            self.assertTrue(conan_calls)
+            for call in conan_calls:
+                self.assertEqual(call.kwargs["cwd"], ROOT.parent)
+            self.assertIn(str(ROOT), conan_calls[0].args[0])
+            self.assertIn("--output-folder=" + str(ROOT), conan_calls[0].args[0])
     def test_version_and_bounded_profiles(self):
         self.assertRegex(release.version(), r"-(?:rc|alpha)\.\d+$")
         for name in ("smoke", "lifecycle", "bounded-stress", "observation"):
