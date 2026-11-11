@@ -19,7 +19,7 @@ A Java 25 plugin framework built into Endstone, powered by the original Minecraf
 ---
 
 > [!IMPORTANT]
-> **Release candidate — production approval is pending.** Windows builds, native/JNI tests, and local packaging have passed. Real BDS validation of this RC is blocked until network isolation is demonstrated. Gameplay with a connected Bedrock client, Linux, and Temurin 25 remain unvalidated. See the [complete validation report](docs/validation.md).
+> **Alpha 1 — production approval is pending.** Windows builds, native/JNI tests, and local packaging have passed. Real BDS validation of this RC is blocked until network isolation is demonstrated. Windows CI with Temurin 25 has passed. Connected-client gameplay and Linux remain open. See the [complete validation report](docs/validation.md).
 
 ## ✦ Built for Bedrock. Designed for Java.
 
@@ -75,13 +75,13 @@ flowchart TD
 | **BDS baseline** | Separately supplied **1.26.60.6** installation |
 | **Endstone basis** | **0.11.15** |
 
-All Java modules use toolchain 25 and `options.release = 25`. Older Java runtimes are unsupported. When Temurin is unavailable, an existing JDK 25 may be selected using the documented `-PzernythJavaVendor=any` override. The current local validation used Oracle JDK 25; it does not validate Temurin.
+All Java modules use toolchain 25 and `options.release = 25`. Older Java runtimes are unsupported. When Temurin is unavailable, an existing JDK 25 may be selected using the documented `-PzernythJavaVendor=any` override. Local validation used Oracle JDK 25. Windows CI additionally validated Eclipse Temurin 25.0.5.
 
 ### Build, verify, install
 
 Python distribution: **`zernyth-engine==0.9.0a1`**, command **`zernyth`**. The first wheel targets Windows x64 / CPython 3.15 and replaces `endstone` in a separate virtual environment. Do not install both packages together. See the [wheel and manual publishing guide](docs/pypi.md); no package upload has been performed in this development phase.
 
-The [Alpha packaging report](docs/pypi-validation.md) records successful installation, native-path sanitization and regression tests. Upload approval remains separate from those local checks.
+The [Alpha packaging report](docs/pypi-validation.md) records a successful Windows GitHub build with Temurin 25, native/JNI tests, installation and artifact verification. Package uploads use the owner-selected manual target.
 
 1. Follow the **[build and installation guide](docs/zernyth-release-0.9.md)** to prepare the supported toolchain and existing dependency caches.
 2. Build Java and native artifacts as a matching versioned set. The shared version comes from [`zernyth-version.txt`](zernyth-version.txt).
@@ -144,22 +144,23 @@ The relative repository path above matches the template directory in this source
 
 ## ✅ Validation and compatibility
 
-The following results are recorded in the **[0.9 RC validation report](docs/validation.md)**. They are prior executed checks, not a new test run for this README update.
+Current Windows CI results are recorded in the **[Alpha validation report](docs/pypi-validation.md)**. The table also retains earlier local archived-plugin and sanitizer-helper results with their respective scope.
 
 | Validation scope | Status | Evidence boundary |
 |---|---|---|
 | Java 25 and Windows native/Python build | **PASS** | Oracle JDK 25; Windows x64 |
 | Native/JNI suite | **PASS** | **249/249** tests |
 | JNI checker | **PASS** | Nine test processes; no reported checker violations |
-| Release infrastructure tests | **PASS** | **10/10** tests |
+| Python tooling and CI tests | **PASS** | **46/46** tests |
 | Archived example JARs 0.2–0.8 | **PASS** | Lifecycle regression with the production JNI bridge and native mocks |
 | Packaging, extracted import, SDK template | **PASS** | Local installation and offline template build |
 | Handle-helper ASan/UBSan | **PASS** | Bounded helper only; not the entire core |
 | Windows leak detection | **BLOCKED** | Unsupported by the installed ASan runtime |
 | Real BDS lifecycle for this RC | **BLOCKED** | Network isolation not demonstrated |
 | Connected-client gameplay and packet tests | **NOT TESTED** | Requires an isolated server and compatible Bedrock client |
-| Linux, Temurin 25, full-core sanitizers | **NOT TESTED** | Separate validation remains open |
-| CI execution | **NOT TESTED** | Manual-only workflow prepared; not triggered |
+| Eclipse Temurin 25.0.5 on Windows | **PASS** | Native/JNI tests and isolated wheel installation |
+| Linux and full-core sanitizers | **NOT TESTED** | Separate validation remains open |
+| CI execution | **PASS** | Manual Windows build-only run, artifact downloaded and verified |
 
 Other BDS versions are not approved by this RC's compatibility contract. A successful mock test, import, or server startup does not establish complete gameplay compatibility. No TPS, player-capacity, or universal compatibility guarantee is made.
 
