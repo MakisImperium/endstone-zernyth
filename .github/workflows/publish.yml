@@ -41,17 +41,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Add preinstalled Windows build tools to the job PATH
-        shell: pwsh
+        shell: powershell
         run: |
           foreach ($directory in ($env:ZERNYTH_TOOL_PATHS -split ';')) {
             if ([string]::IsNullOrWhiteSpace($directory)) { continue }
             if (!(Test-Path -LiteralPath $directory -PathType Container)) {
               throw "Configured tool directory does not exist: $directory"
             }
-            $directory >> $env:GITHUB_PATH
+            $directory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }
       - name: Verify exact release commit and production tag
-        shell: pwsh
+        shell: powershell
         run: python scripts/zernyth_wheel.py release-ref
       - uses: actions/setup-java@v5
         with:
@@ -59,7 +59,7 @@ jobs:
           java-version: '25'
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Build matching native and Java components using offline caches
-        shell: pwsh
+        shell: powershell
         run: |
           python -c "import sys; assert sys.version_info[:2] == (3, 15), 'Dedicated runner requires CPython 3.15 x64'"
           python scripts/zernyth_release.py build --gradle "$env:ZERNYTH_GRADLE" --lockfile config/zernyth-publish-conan.lock
@@ -76,11 +76,11 @@ jobs:
           exit $LASTEXITCODE
       - name: Record the validated wheel digest
         id: wheel_digest
-        shell: pwsh
+        shell: powershell
         run: |
           $wheel = Get-Item dist/zernyth_engine-0.9.0a1-cp315-cp315-win_amd64.whl
           $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $wheel.FullName).Hash.ToLowerInvariant()
-          "sha256=$digest" >> $env:GITHUB_OUTPUT
+          "sha256=$digest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - uses: actions/upload-artifact@v7
         with:
           name: zernyth-alpha-windows-${{ inputs.commit }}
