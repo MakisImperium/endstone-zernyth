@@ -148,6 +148,13 @@ class WheelTests(unittest.TestCase):
         data = yaml.load((ROOT / ".github/workflows/publish.yml").read_text(), Loader=yaml.BaseLoader)
         self.assertEqual(list(data["on"]), ["workflow_dispatch"])
         self.assertEqual(data["permissions"], {"contents": "read"})
+        checkout = next(index for index, step in enumerate(data["jobs"]["wheel"]["steps"])
+                        if "actions/checkout" in step.get("uses", ""))
+        preparation = data["jobs"]["wheel"]["steps"][0]["run"]
+        self.assertGreater(checkout, 0)
+        self.assertIn("GIT_CONFIG_VALUE_0=$checkoutPath", preparation)
+        self.assertIn(".Replace('\\', '/')", preparation)
+        self.assertNotIn("safe.directory=*", preparation)
         for name in ("testpypi", "pypi"):
             job = data["jobs"][name]
             self.assertEqual(job["environment"]["name"], name)
