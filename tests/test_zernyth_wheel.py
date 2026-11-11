@@ -152,8 +152,8 @@ class WheelTests(unittest.TestCase):
                         if "actions/checkout" in step.get("uses", ""))
         preparation = data["jobs"]["wheel"]["steps"][0]["run"]
         self.assertGreater(checkout, 0)
-        self.assertIn("GIT_CONFIG_VALUE_0=$checkoutPath", preparation)
-        self.assertIn(".Replace('\\', '/')", preparation)
+        self.assertIn("GIT_CONFIG_VALUE_0=", preparation)
+        self.assertIn(".replace(chr(92), '/')", preparation)
         self.assertNotIn("safe.directory=*", preparation)
         for name in ("testpypi", "pypi"):
             job = data["jobs"][name]

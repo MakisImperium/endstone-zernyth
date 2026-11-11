@@ -129,6 +129,9 @@ runner labelled `self-hosted`, `Windows`, `X64`, `zernyth-publish`, with:
   installed Python, Conan, LLVM, CMake and Ninja tools. These are added to the
   individual job's PATH. The CI build invokes Conan from the checkout parent
   with explicit recipe/output paths so `.conanrc` cannot replace the supplied cache.
+- `ZERNYTH_PYTHON` specifies the full path to the preinstalled CPython 3.15
+  executable. Windows steps use cmd and Python for UTF-8 file commands, allowing
+  the runner to honor the machine's existing PowerShell script policy.
 - Conan profiles and the recipe/package revisions in the checked-in Windows lock.
 - Existing Gradle dependency caches. No dependency compilation/download fallback
   is allowed by the native build driver.
