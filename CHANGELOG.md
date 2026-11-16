@@ -1,5 +1,16 @@
 # Zernyth Engine changelog
 
+## Unreleased
+
+### Added
+
+- Linux installer `zernyth-install.sh` with `install`, `update`, `rollback` and a `zernyth` command.
+
+### Changed
+
+- `zernyth` without options finds JDK 25, downloads Bedrock Dedicated Server into `./bedrock_server` after confirmation and starts the server.
+- `zernyth --check` only checks BDS and Java; `--run` is no longer needed.
+
 ## 1.0.0 - prepared 2026-11-16
 
 First stable release for Windows x64, CPython 3.15, Java 25 and BDS 1.26.60.6.

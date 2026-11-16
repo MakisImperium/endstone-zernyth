@@ -37,7 +37,8 @@ class InstallScriptTests(unittest.TestCase):
         for version, install in (("1.0.0", INSTALL_OK), ("1.1.0", INSTALL_OK), ("1.2.0", INSTALL_FAIL)):
             self.release(version, install)
         self.latest("1.0.0")
-        self.env = dict(os.environ, ZERNYTH_HOME=str(self.root / "home"), ZERNYTH_API=self.base)
+        self.env = dict(os.environ, ZERNYTH_HOME=str(self.root / "home"), ZERNYTH_API=self.base,
+                        ZERNYTH_BIN=str(self.root / "bin"))
 
     def tearDown(self):
         self.server.shutdown()
@@ -47,7 +48,7 @@ class InstallScriptTests(unittest.TestCase):
         name = f"zernyth-engine-{version}-ubuntu24-x86_64-cp312"
         buffer = io.BytesIO()
         with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
-            for file, text in (("install.sh", install), ("start.sh", START)):
+            for file, text in (("install.sh", install), ("start.sh", START), ("BUILD.json", '{"bds": "1.26.60.6"}')):
                 data = text.encode()
                 info = tarfile.TarInfo(f"{name}/{file}")
                 info.size, info.mode = len(data), 0o755
@@ -93,16 +94,38 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("checksum mismatch", result.stderr)
         self.assertEqual(self.run_script("versions").stdout, "")
 
-    def test_start_remembers_server_and_java(self):
+    def fake_jdk(self):
+        jdk = self.root / "jdk"
+        (jdk / "bin").mkdir(parents=True)
+        (jdk / "lib/server").mkdir(parents=True)
+        (jdk / "lib/server/libjvm.so").touch()
+        java = jdk / "bin/java"
+        java.write_text('#!/bin/sh\necho \'openjdk version "25.0.1"\' >&2\n')
+        java.chmod(0o755)
+        return jdk
+
+    def test_start_runs_by_default_and_remembers_folders(self):
         self.run_script("install")
-        for folder in ("bds", "jdk"):
-            (self.root / folder).mkdir()
-        self.assertNotEqual(self.run_script("start").returncode, 0)
-        first = self.run_script("start", "--server", str(self.root / "bds"), "--java-home", str(self.root / "jdk"), "--run")
-        self.assertIn(f"--server {self.root / 'bds'} --java-home {self.root / 'jdk'} --run", first.stdout)
-        again = self.run_script("start")
-        self.assertIn(f"--server {self.root / 'bds'}", again.stdout)
-        self.assertNotIn("--run", again.stdout)
+        self.assertTrue((self.root / "home").is_dir())
+        jdk = self.fake_jdk()
+        bds = self.root / "bds"
+        bds.mkdir()
+        (bds / "bedrock_server").write_text("#!/bin/sh\n")
+        (bds / "bedrock_server").chmod(0o755)
+        first = self.run_script("start", "--server", str(bds), "--java-home", str(jdk))
+        self.assertIn(f"--server {bds} --java-home {jdk} --run", first.stdout)
+        check = self.run_script("start", "--check")
+        self.assertIn(f"--server {bds}", check.stdout)
+        self.assertNotIn("--run", check.stdout)
+
+    def test_missing_bds_is_not_downloaded_without_consent(self):
+        self.run_script("install")
+        jdk = self.fake_jdk()
+        result = subprocess.run(["bash", str(SCRIPT), "start", "--java-home", str(jdk)], env=self.env, cwd=self.root,
+                                capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--yes", result.stderr)
+        self.assertFalse((self.root / "bedrock_server").exists())
 
 
 if __name__ == "__main__":

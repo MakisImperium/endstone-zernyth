@@ -23,7 +23,7 @@ A Java 25 plugin framework built into Endstone, powered by the original Minecraf
 
 ## ⚡ Install a server
 
-You need three things that Zernyth does not ship: the **Bedrock Dedicated Server 1.26.60.6** from Mojang (other versions are not supported yet), a **JDK 25** (we recommend [Eclipse Temurin 25](https://adoptium.net/temurin/releases/?version=25)) and **Python** in the version named below. Try it on a test server with a new world first.
+You need the **Bedrock Dedicated Server 1.26.60.6** from Mojang (other versions are not supported yet; the Ubuntu installer downloads it for you), a **JDK 25** (we recommend [Eclipse Temurin 25](https://adoptium.net/temurin/releases/?version=25)) and **Python** in the version named below. Try it on a test server with a new world first.
 
 ### Windows (x64)
 
@@ -43,19 +43,14 @@ You need three things that Zernyth does not ship: the **Bedrock Dedicated Server
 
 ### Ubuntu 24.04 (x86_64)
 
-1. Install Temurin 25 (see [adoptium.net](https://adoptium.net/installation/linux/)) and `curl`. Python 3.12 is already part of Ubuntu 24.04.
-2. Unpack BDS 1.26.60.6 for Linux, for example to `/opt/bds`.
-3. Install Zernyth with the installer script. It downloads the latest stable release, verifies its checksum and installs it into `~/zernyth`:
+1. Install a JDK 25, for example [Eclipse Temurin 25](https://adoptium.net/installation/linux/), and `curl`.
+2. Install Zernyth and start it:
    ```sh
    curl -fsSLO https://raw.githubusercontent.com/MakisImperium/endstone-zernyth/main/packaging/linux/zernyth-install.sh
    bash zernyth-install.sh install
+   zernyth
    ```
-4. Check the setup once with your folders (they are remembered), then start the server:
-   ```sh
-   ~/zernyth/zernyth-install start --server /opt/bds --java-home /usr/lib/jvm/temurin-25-jdk-amd64
-   ~/zernyth/zernyth-install start --run
-   ```
-   Type `stop` in the console to shut the server down.
+   `zernyth` finds your JDK, offers to download Bedrock Dedicated Server 1.26.60.6 into `./bedrock_server` (its checksum is verified) and starts the server. Next time, `zernyth` alone is enough – the folders are remembered. Use `zernyth --server /path/to/bds` for an existing server and `zernyth --check` to only check the setup. Type `stop` in the console to shut the server down.
 
 The manual way without the script – download the archive and `SHA256SUMS` from the [release page](https://github.com/MakisImperium/endstone-zernyth/releases/tag/v1.0.0), check them with `sha256sum --check --ignore-missing SHA256SUMS`, then run `./install.sh` and `./start.sh` in the extracted folder – still works.
 

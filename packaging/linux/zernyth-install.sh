@@ -3,14 +3,17 @@
 #   zernyth-install.sh install [VERSION]     install the latest stable release (or VERSION)
 #   zernyth-install.sh update                install a newer release next to the current one and switch to it
 #   zernyth-install.sh rollback              switch back to the previous version
-#   zernyth-install.sh start [--server DIR] [--java-home DIR] [--run]
+#   zernyth-install.sh start [--server DIR] [--java-home DIR] [--check] [--yes]
 #   zernyth-install.sh status | versions | prune
-# Each version lives in its own folder; "current" points to the active one. BDS, worlds and plugins are not touched.
+# install also creates the command "zernyth" (= start). Without options, start uses ./bedrock_server, downloads
+# Bedrock Dedicated Server there after confirmation, finds JDK 25 and starts the server. Folders are remembered.
 set -euo pipefail
 
 REPO=MakisImperium/endstone-zernyth
 HOME_DIR=${ZERNYTH_HOME:-$HOME/zernyth}
 API=${ZERNYTH_API:-https://api.github.com/repos/$REPO}
+BDS_DATA=${ZERNYTH_BDS_DATA:-https://raw.githubusercontent.com/EndstoneMC/bedrock-server-data/v2/release}
+BIN_DIR=${ZERNYTH_BIN:-$HOME/.local/bin}
 VERSIONS=$HOME_DIR/versions
 CONFIG=$HOME_DIR/config
 WORK=""
@@ -101,8 +104,12 @@ install_version() {
     elif [[ -f $0 && $(basename "$0") == zernyth-install* ]]; then
         cp -f "$0" "$HOME_DIR/zernyth-install" && chmod +x "$HOME_DIR/zernyth-install"
     fi
+    mkdir -p "$BIN_DIR"
+    printf '#!/bin/sh\nexec "%s/zernyth-install" start "$@"\n' "$HOME_DIR" > "$BIN_DIR/zernyth"
+    chmod +x "$BIN_DIR/zernyth"
     say "Zernyth $version is active${previous:+ (previous: $previous)}."
-    echo "Start it with: $HOME_DIR/zernyth-install start --server /path/to/bds --java-home /path/to/jdk25"
+    echo "Start the server with: zernyth"
+    case ":$PATH:" in *":$BIN_DIR:"*) ;; *) echo "($BIN_DIR is not on PATH yet: open a new terminal or run $BIN_DIR/zernyth)" ;; esac
     [[ -n $previous && $previous != "$version" ]] && echo "Restart a running server to use the new version."
     return 0
 }
@@ -131,23 +138,78 @@ cmd_rollback() {
     say "Zernyth $(active_version) is active again. Restart a running server to use it."
 }
 
+java_ok() { [[ -x $1/bin/java && -f $1/lib/server/libjvm.so ]] && "$1/bin/java" -version 2>&1 | grep -q 'version "25[."]'; }
+
+find_java() {
+    local home
+    for home in "${JAVA_HOME:-}" /usr/lib/jvm/*25* "$(dirname "$(dirname "$(readlink -f "$(command -v java || echo /nonexistent)")")")"; do
+        [[ -n $home ]] && java_ok "$home" && { echo "$home"; return 0; }
+    done
+    return 1
+}
+
+confirm() {
+    [[ $2 == 1 ]] && return 0
+    [[ -t 0 ]] || return 1
+    local answer
+    read -r -p "$1 [Y/n] " answer
+    [[ -z $answer || $answer =~ ^([yYjJ]|yes|ja)$ ]]
+}
+
+# Downloads the BDS version the active release was built for, verified against its published SHA-256.
+download_bds() {
+    local server=$1 assume_yes=$2 bds version meta url sha
+    bds=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("bds", ""))' "$HOME_DIR/current/BUILD.json")
+    [[ $bds =~ ^1\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "the active release names no BDS version"
+    version=${bds%.*}
+    confirm "Bedrock Dedicated Server $bds is not in $server. Download it from minecraft.net now? By downloading you accept the Minecraft EULA (https://www.minecraft.net/eula)." "$assume_yes" \
+        || die "put Bedrock Dedicated Server $bds into $server, use --server, or run again with --yes"
+    meta=$(curl -fsSL "$BDS_DATA/$version/metadata.json") || die "could not read the BDS download index"
+    read -r url sha < <(printf '%s' "$meta" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)["binary"]["linux"]
+print(data["url"], data["sha256"])' | tr -d '\r')
+    [[ $url == */bin-linux/bedrock-server-$bds.zip && $sha =~ ^[0-9a-f]{64}$ ]] \
+        || die "the BDS download index does not match version $bds"
+    mkdir -p "$HOME_DIR"
+    WORK=$(mktemp -d "$HOME_DIR/.download.XXXXXX")
+    say "Downloading Bedrock Dedicated Server $bds"
+    curl -fL --retry 3 -A "zernyth-install" -o "$WORK/bds.zip" "$url"
+    echo "$sha  $WORK/bds.zip" | sha256sum --check --status || die "checksum mismatch for the BDS download; nothing was changed"
+    mkdir -p "$server"
+    python3 -m zipfile -e "$WORK/bds.zip" "$server"
+    chmod +x "$server/bedrock_server"
+    rm -rf "$WORK"
+    WORK=""
+    say "Bedrock Dedicated Server $bds is in $server"
+}
+
 cmd_start() {
     [[ -L $HOME_DIR/current ]] || die "Zernyth is not installed yet; run: $0 install"
-    local server="" java="" run=() arg
+    local server="" java="" check=0 yes=0 run=(--run)
     [[ -f $CONFIG ]] && { server=$(sed -n 's/^server=//p' "$CONFIG"); java=$(sed -n 's/^java_home=//p' "$CONFIG"); }
     while (($#)); do
         case $1 in
             --server) server=$2; shift 2 ;;
             --java-home) java=$2; shift 2 ;;
-            --run) run=(--run); shift ;;
+            --check) check=1; run=(); shift ;;
+            -y|--yes) yes=1; shift ;;
+            --run) shift ;;
             *) die "unknown option: $1" ;;
         esac
     done
-    [[ -n $server && -n $java ]] || die "pass --server /path/to/bds and --java-home /path/to/jdk25 once; they are remembered"
-    server=$(cd "$server" && pwd) || die "BDS folder not found"
-    java=$(cd "$java" && pwd) || die "JDK folder not found"
-    mkdir -p "$HOME_DIR"
+    [[ -n $java ]] || java=$(find_java) || die "no JDK 25 found; install one, e.g. Eclipse Temurin 25 (https://adoptium.net/installation/linux/), or pass --java-home"
+    java_ok "$java" || die "$java is not a JDK 25"
+    server=${server:-$PWD/bedrock_server}
+    if [[ ! -x $server/bedrock_server ]]; then
+        ((check)) && die "no Bedrock Dedicated Server in $server"
+        download_bds "$server" "$yes"
+    fi
+    server=$(cd "$server" && pwd)
+    java=$(cd "$java" && pwd)
     printf 'server=%s\njava_home=%s\n' "$server" "$java" > "$CONFIG"
+    echo "Java: $java"
+    echo "Server: $server"
     exec "$HOME_DIR/current/start.sh" --server "$server" --java-home "$java" "${run[@]}"
 }
 

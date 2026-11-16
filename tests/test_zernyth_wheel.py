@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -134,6 +135,57 @@ class WheelTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.object(cli.subprocess, "run", return_value=result):
             with self.assertRaisesRegex(ValueError, "JVM library"):
                 cli._java_runtime(directory)
+
+    def test_java_home_is_found_without_configuration(self):
+        from zernyth import cli
+        with tempfile.TemporaryDirectory() as directory:
+            wanted = Path(directory) / "jdk-25"
+            with patch.object(cli, "_java_candidates", return_value=iter([Path(directory) / "old", wanted])), \
+                    patch.object(cli, "_java_runtime", side_effect=[ValueError("JDK 25 is required"), wanted / "jvm.dll"]):
+                self.assertEqual(cli.find_java_home(), wanted.resolve())
+            with patch.object(cli, "_java_candidates", return_value=iter([])):
+                self.assertIsNone(cli.find_java_home())
+
+    def _fake_bootstrap(self, server):
+        class FakeBootstrap:
+            minecraft_version = "26.60"
+            downloads = []
+
+            def __init__(self, server_folder, **kwargs):
+                self.executable_path = Path(server_folder) / "bedrock_server.exe"
+
+            def _download(self, destination):
+                FakeBootstrap.downloads.append(destination)
+
+        module = SimpleNamespace(WindowsBootstrap=FakeBootstrap)
+        return FakeBootstrap, patch.dict(sys.modules, {"endstone.cli.windows": module})
+
+    def test_cli_never_downloads_bds_without_consent(self):
+        from zernyth import cli
+        with tempfile.TemporaryDirectory() as directory:
+            server = Path(directory) / "bedrock_server"
+            bootstrap, modules = self._fake_bootstrap(server)
+            with modules, patch.object(cli.os, "name", "nt"), patch.object(cli, "reject_conflicting_distribution"), \
+                    patch.object(cli, "get_version", return_value="1.0.0"), \
+                    patch.object(cli, "_java_runtime", return_value=Path(directory) / "jvm.dll"), \
+                    patch.object(cli.sys.stdin, "isatty", return_value=False), \
+                    patch("sys.stderr", new_callable=io.StringIO) as error:
+                for argv in (["--server", str(server), "--java-home", directory, "--check"],
+                             ["--server", str(server), "--java-home", directory]):
+                    with self.assertRaises(SystemExit):
+                        cli.main(argv)
+            self.assertEqual(bootstrap.downloads, [])
+            self.assertIn("--yes", error.getvalue())
+
+    def test_cli_reports_missing_jdk_with_install_hint(self):
+        from zernyth import cli
+        with patch.object(cli.os, "name", "nt"), patch.object(cli, "reject_conflicting_distribution"), \
+                patch.object(cli, "get_version", return_value="1.0.0"), \
+                patch.object(cli, "find_java_home", return_value=None), \
+                patch("sys.stderr", new_callable=io.StringIO) as error:
+            with self.assertRaises(SystemExit):
+                cli.main([])
+        self.assertIn("winget install EclipseAdoptium.Temurin.25.JDK", error.getvalue())
 
     def test_build_only_verifies_the_requested_commit(self):
         with patch.dict(os.environ, {"RELEASE_COMMIT": "a" * 40, "RELEASE_TARGET": "build-only"}), \
