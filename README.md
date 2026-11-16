@@ -43,23 +43,21 @@ You need three things that Zernyth does not ship: the **Bedrock Dedicated Server
 
 ### Ubuntu 24.04 (x86_64)
 
-1. Install Temurin 25 (see [adoptium.net](https://adoptium.net/installation/linux/)). Python 3.12 is already part of Ubuntu 24.04.
+1. Install Temurin 25 (see [adoptium.net](https://adoptium.net/installation/linux/)) and `curl`. Python 3.12 is already part of Ubuntu 24.04.
 2. Unpack BDS 1.26.60.6 for Linux, for example to `/opt/bds`.
-3. Download, verify and install Zernyth:
+3. Install Zernyth with the installer script. It downloads the latest stable release, verifies its checksum and installs it into `~/zernyth`:
    ```sh
-   wget https://github.com/MakisImperium/endstone-zernyth/releases/download/v1.0.0/zernyth-engine-1.0.0-ubuntu24-x86_64-cp312.tar.gz
-   wget https://github.com/MakisImperium/endstone-zernyth/releases/download/v1.0.0/SHA256SUMS
-   sha256sum --check --ignore-missing SHA256SUMS
-   tar -xzf zernyth-engine-1.0.0-ubuntu24-x86_64-cp312.tar.gz
-   cd zernyth-engine-1.0.0-ubuntu24-x86_64-cp312
-   ./install.sh
+   curl -fsSLO https://raw.githubusercontent.com/MakisImperium/endstone-zernyth/main/packaging/linux/zernyth-install.sh
+   bash zernyth-install.sh install
    ```
-4. Check the setup, then start the server (replace the JDK path with yours):
+4. Check the setup once with your folders (they are remembered), then start the server:
    ```sh
-   ./start.sh --server /opt/bds --java-home /usr/lib/jvm/temurin-25-jdk-amd64
-   ./start.sh --server /opt/bds --java-home /usr/lib/jvm/temurin-25-jdk-amd64 --run
+   ~/zernyth/zernyth-install start --server /opt/bds --java-home /usr/lib/jvm/temurin-25-jdk-amd64
+   ~/zernyth/zernyth-install start --run
    ```
    Type `stop` in the console to shut the server down.
+
+The manual way without the script – download the archive and `SHA256SUMS` from the [release page](https://github.com/MakisImperium/endstone-zernyth/releases/tag/v1.0.0), check them with `sha256sum --check --ignore-missing SHA256SUMS`, then run `./install.sh` and `./start.sh` in the extracted folder – still works.
 
 ### Add plugins
 
@@ -67,7 +65,12 @@ Download plugins from the **[Zernyth Marketplace](https://zernyth.net/marketplac
 
 ### Update or remove
 
-Stop the server and back up your worlds, plugin data and configuration. Install the new version into a **new** folder the same way and start it with the same BDS folder; keep the old folder until the new version runs. Zernyth changes no worlds by itself. To remove Zernyth, delete its folder – BDS, worlds and the JDK stay untouched. More details: [installation guide](https://zernyth.net/docs/1.0.0/engine-installation).
+Stop the server and back up your worlds, plugin data and configuration first. Zernyth changes no worlds by itself.
+
+- **Windows:** `.\.venv\Scripts\python.exe -m pip install -U zernyth-engine`
+- **Ubuntu:** `~/zernyth/zernyth-install update` installs the new version next to the current one and switches only when it installed cleanly. `~/zernyth/zernyth-install rollback` goes back to the previous version, `status` shows both.
+
+To remove Zernyth, delete its folder (`.venv` or `~/zernyth`) – BDS, worlds and the JDK stay untouched. More details: [installation guide](https://zernyth.net/docs/1.0.0/engine-installation).
 
 ## ✦ Built for Bedrock. Designed for Java.
 

@@ -43,6 +43,10 @@ run its installer and inspect the existing BDS before starting. Keep the previou
 archive and environment available for rollback. Back up plugin data before applying
 plugin-specific migrations. The installer operates inside its extracted directory.
 
+`zernyth-install.sh` from the repository's `packaging/linux` folder automates this:
+`install`, `update` (new version in its own folder, switched only after a clean install),
+`rollback`, `start` and `status`. It verifies every archive against the release's `SHA256SUMS`.
+
 ## Libraries and licenses
 
 Complete project, native, Java and bundled-system-library notices are in `LICENSES`.

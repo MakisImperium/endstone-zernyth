@@ -7,3 +7,6 @@
 
 # Original notice bytes, line endings and trailing blank lines are part of the hash inventory.
 /packaging/licenses/** -text -whitespace
+
+# Fetched raw from GitHub and run by bash on Linux.
+/packaging/linux/zernyth-install.sh text eol=lf
