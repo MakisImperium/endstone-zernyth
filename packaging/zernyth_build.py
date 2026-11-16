@@ -1,4 +1,4 @@
-"""Offline PEP 517 backend for matching Windows native and Java artifacts.
+"""Offline PEP 517 backend for matching Windows x64 and Linux x86_64 native and Java artifacts.
 
 By default the existing release driver builds all artifacts. An explicit
 native-build-dir setting packages an already built, matching set without rebuilding.
@@ -138,9 +138,49 @@ def licenses(stage, graph):
     (destination / "native-inventory.json").write_text(json.dumps(inventory, indent=2), encoding="utf-8")
 
 
+WINDOWS = sys.platform == "win32"
+LINUX_NOTICES = ("libc++1-20", "libc++abi1-20", "libunwind-20")
+
+
+def linux_payload(stage, build, graph, settings):
+    """Linux: system allocator only, replaceable shared libelf/libdwarf with their sources, audited BDS hash."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import zernyth_linux_release as linux
+    bds_sha256 = settings.get("bds-sha256", "")
+    if not re.fullmatch("[0-9a-f]{64}", bds_sha256):
+        raise ValueError("Linux wheels need the audited BDS executable SHA-256 (-Cbds-sha256=...)")
+    for path in list((stage / "endstone").rglob("*.dbg")) + list((stage / "endstone").rglob("libmimalloc.so")):
+        path.unlink()
+    for name in ("libendstone_runtime.so", "crashpad_handler"):
+        if not (stage / "endstone" / name).is_file():
+            raise ValueError("Missing native runtime component: " + name)
+    readelf = settings.get("readelf", "readelf")
+    output = subprocess.check_output([readelf, "-dW", str(stage / "endstone/libendstone_runtime.so")], text=True, timeout=30)
+    for library in ("libelf", "libdwarf"):
+        if not re.search(r"\(NEEDED\).*\[" + library + r"\.so(?:\.[^\]]+)?\]", output):
+            raise ValueError("Runtime is missing the shared dependency: " + library)
+    conan = settings.get("conan", os.environ.get("ZERNYTH_CONAN", "conan"))
+    sources = stage / "zernyth/licenses/sources"
+    for node in linux.dependencies(graph, conan):
+        if node["ref"].startswith(("libelf/", "libdwarf/")):
+            key = node["ref"].split("#")[0].replace("/", "-")
+            shutil.copytree(linux.conan_path(conan, node["ref"], "source"), sources / key, symlinks=False)
+            shutil.copytree(linux.conan_path(conan, node["ref"]), sources / (key + "-recipe"), symlinks=False)
+    for package in LINUX_NOTICES:
+        notice = Path("/usr/share/doc") / package / "copyright"
+        if not notice.is_file():
+            raise ValueError("Missing system-library license notice: " + package)
+        target = stage / "zernyth/licenses/system" / package
+        target.mkdir(parents=True)
+        shutil.copy2(notice, target / "copyright")
+    shutil.copy2(ROOT / "config/conan/linux-release.profile", sources / "zernyth-linux-release.profile")
+    linux.check_native_paths(stage, (ROOT, os.environ.get("CONAN_HOME"), settings.get("private-build-root")))
+    return {"bds": "1.26.60.6", "bdsSha256": bds_sha256, "allocator": "system", "librariesReplaceable": True}
+
+
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    if sys.platform != "win32" or sysconfig.get_platform() != "win-amd64":
-        raise RuntimeError("Only Windows x64 wheels are enabled; use the separate Ubuntu archive on Linux")
+    if sysconfig.get_platform() not in ("win-amd64", "linux-x86_64"):
+        raise RuntimeError("Wheels are built for Windows x64 and Linux x86_64 only")
     settings = config_settings or {}
     if "native-build-dir" not in settings:
         command = [sys.executable, str(ROOT / "scripts/zernyth_release.py"), "build",
@@ -155,15 +195,19 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     sys.path.insert(0, str(ROOT / "scripts"))
     import zernyth_release as release
     native = release.check_artifacts(build)
-    link_map = build / "src/endstone/runtime/endstone_runtime.map"
-    linked = link_map.read_text(encoding="utf-8", errors="replace")
-    if "SymFromAddr" not in linked or re.search(r"(?i)libdwarf|\b_?dwarf_[A-Za-z0-9_]+\b", linked):
-        raise ValueError("Windows distribution requires the audited DbgHelp backend without linked libdwarf objects")
-    if native["platform"] != "Windows" or not native["pythonVersion"].startswith(
+    if WINDOWS:
+        link_map = build / "src/endstone/runtime/endstone_runtime.map"
+        linked = link_map.read_text(encoding="utf-8", errors="replace")
+        if "SymFromAddr" not in linked or re.search(r"(?i)libdwarf|\b_?dwarf_[A-Za-z0-9_]+\b", linked):
+            raise ValueError("Windows distribution requires the audited DbgHelp backend without linked libdwarf objects")
+    if native["platform"] != ("Windows" if WINDOWS else "Linux") or not native["pythonVersion"].startswith(
             f"{sys.version_info.major}.{sys.version_info.minor}."):
         raise ValueError("Native build platform/Python ABI differs from the wheel interpreter")
     graph = json.loads((ROOT / "build/release-013/dependency-graph.json").read_text(encoding="utf-8"))
     tag = next(sys_tags())
+    if not WINDOWS:
+        # auditwheel repair replaces the generic tag with the matching manylinux tag.
+        tag = f"{tag.interpreter}-{tag.abi}-linux_x86_64"
     version = project()["version"]
     filename = f"{DIST}-{version}-{tag}.whl"
     with tempfile.TemporaryDirectory(prefix="zernyth-wheel-") as directory:
@@ -177,10 +221,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         release.run([cmake, "--install", build, "--prefix", stage, "--component", "endstone_wheel"])
         for path in (stage / "endstone").rglob("*.pdb"):
             path.unlink()
-        required = ("endstone_runtime.dll", "endstone_runtime_loader.dll", "crashpad_handler.exe", "crashpad_wer.dll")
-        for name in required:
-            if not (stage / "endstone" / name).is_file():
-                raise ValueError("Missing native runtime component: " + name)
+        if WINDOWS:
+            for name in ("endstone_runtime.dll", "endstone_runtime_loader.dll", "crashpad_handler.exe", "crashpad_wer.dll"):
+                if not (stage / "endstone" / name).is_file():
+                    raise ValueError("Missing native runtime component: " + name)
         for name in ("_python", "_detours"):
             path = stage / "endstone" / (name + sysconfig.get_config_var("EXT_SUFFIX"))
             if not path.is_file():
@@ -190,13 +234,16 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
             source = release.java_artifacts()[name]
             shutil.copy2(source, stage / "zernyth/java" / source.name)
         shutil.copy2(ROOT / "scripts/zernyth_bds.py", stage / "zernyth/bds.py")
-        (stage / "zernyth/BUILD.json").write_text(json.dumps(native, sort_keys=True), encoding="utf-8")
         licenses(stage, graph)
-        (stage / "zernyth/licenses/windows-link-audit.json").write_text(json.dumps({
-            "symbolBackend": "DbgHelp", "libdwarfLinked": False,
-            "evidence": "Compiler backend configuration and linker object map",
-            "linkMapSha256": hashlib.sha256(link_map.read_bytes()).hexdigest(),
-        }, sort_keys=True), encoding="utf-8")
+        if WINDOWS:
+            (stage / "zernyth/licenses/windows-link-audit.json").write_text(json.dumps({
+                "symbolBackend": "DbgHelp", "libdwarfLinked": False,
+                "evidence": "Compiler backend configuration and linker object map",
+                "linkMapSha256": hashlib.sha256(link_map.read_bytes()).hexdigest(),
+            }, sort_keys=True), encoding="utf-8")
+        else:
+            native.update(linux_payload(stage, build, graph, settings))
+        (stage / "zernyth/BUILD.json").write_text(json.dumps(native, sort_keys=True), encoding="utf-8")
         info = write_metadata(stage)
         (info / "WHEEL").write_text(
             f"Wheel-Version: 1.0\nGenerator: zernyth-build\nRoot-Is-Purelib: false\nTag: {tag}\n", encoding="utf-8")

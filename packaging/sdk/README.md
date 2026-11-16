@@ -14,7 +14,7 @@ gradle -PzernythSdkRepository=/absolute/path/to/sdk-repository build
 
 An installed Oracle JDK 25 requires `-PzernythJavaVendor=any`. Add `--offline`
 when your Gradle dependencies are already available locally. The template uses
-`dev.zernyth:api:1.0.0` as a compile-only dependency. Install the resulting JAR
+`dev.zernyth:api:1.0.1` as a compile-only dependency. Install the resulting JAR
 in the separately managed BDS server's `plugins` directory.
 
 ## Maven
@@ -22,17 +22,17 @@ in the separately managed BDS server's `plugins` directory.
 Install the included API into your local Maven repository using one command:
 
 ```sh
-mvn install:install-file -Dfile=api/api-1.0.0.jar -DpomFile=sdk-repository/dev/zernyth/api/1.0.0/api-1.0.0.pom
+mvn install:install-file -Dfile=api/api-1.0.1.jar -DpomFile=sdk-repository/dev/zernyth/api/1.0.1/api-1.0.1.pom
 ```
 
-Declare `dev.zernyth:api:1.0.0` with `provided` scope and set
+Declare `dev.zernyth:api:1.0.1` with `provided` scope and set
 `maven.compiler.release` to `25`. Maven and its plugins must already be installed
 or provisioned explicitly. This archive performs no publication.
 
 ## API reference and runtime rules
 
-Attach `api/api-1.0.0-sources.jar` in your IDE. Extract
-`api/api-1.0.0-javadoc.jar` and open `index.html` for the generated API reference.
+Attach `api/api-1.0.1-sources.jar` in your IDE. Extract
+`api/api-1.0.1-javadoc.jar` and open `index.html` for the generated API reference.
 The Hello example demonstrates lifecycle-owned listeners, tasks and explicit
 diagnostic commands using the public API.
 

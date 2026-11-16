@@ -129,8 +129,10 @@ def build_all(args):
     command = conan + ["install", str(ROOT), "--output-folder=" + str(ROOT),
                        "--no-remote", "--build=never", "-s", "&:build_type=RelWithDebInfo",
                        "--lockfile-out=" + str(lock)]
+    linux_release = os.name != "nt" and getattr(args, "linux_release", False)
     profiles = (["-pr:h", "default", "-pr:h", str(ROOT / "config/conan/windows-sanitized.profile")]
-                if os.name == "nt" else [])
+                if os.name == "nt" else
+                ["-pr:h", "default", "-pr:h", str(ROOT / "config/conan/linux-release.profile")] if linux_release else [])
     command += profiles
     input_lock = getattr(args, "lockfile", None) or (lock if lock.exists() else None)
     if input_lock:
@@ -148,6 +150,11 @@ def build_all(args):
                   if str(node.get("ref", "")).startswith("sentry-native/") and node.get("package_folder"))
     # Refresh the cached install path on both platforms after a dependency rebuild.
     native_runtime_arguments = ["-DSENTRY_NATIVE_BIN_DIR=" + (Path(sentry["package_folder"]) / "bin").as_posix()]
+    if linux_release:
+        if not env.get("ZERNYTH_BUILD_PATH_ROOT"):
+            raise ValueError("--linux-release needs ZERNYTH_BUILD_PATH_ROOT (the private build root mapped out of binaries)")
+        native_runtime_arguments += ["-DZERNYTH_SANITIZE_BUILD_PATHS=ON", "-DENDSTONE_SEPARATE_DEBUG_INFO=ON",
+                                     "-DZERNYTH_BUILD_PATH_ROOT=" + env["ZERNYTH_BUILD_PATH_ROOT"]]
     if getattr(args, "test_host", None):
         native_runtime_arguments.append("-DZERNYTH_BUILD_JAVA_TEST_HOST=ON")
     run([gradle, "--offline", "--no-daemon", f"-PzernythJavaVendor={args.vendor}", "build", ":runtime:allTestJars",
@@ -598,6 +605,8 @@ def main():
     parser.add_argument("--test-host", type=Path, help="Optional first-party Windows test DLL, fresh host per case")
     parser.add_argument("--conan")
     parser.add_argument("--lockfile", type=Path, help="Explicit reviewed input Conan lockfile")
+    parser.add_argument("--linux-release", action="store_true",
+                        help="Linux distribution build: linux-release profile, shared libelf/libdwarf, mapped build paths")
     parser.add_argument("--vendor", choices=("temurin", "any"), default="temurin")
     parser.add_argument("--sanitizers", choices=("", "address,undefined"), default="")
     parser.add_argument("--build-dir", type=Path, default=ROOT / "build/RelWithDebInfo")

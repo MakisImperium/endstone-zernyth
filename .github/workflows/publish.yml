@@ -18,6 +18,11 @@ on:
         required: false
         default: ''
         type: string
+      linux_bds_sha256:
+        description: SHA-256 of the validated Linux bedrock_server 1.26.60.6 executable (needed for a new build)
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -102,13 +107,13 @@ jobs:
           set "install_exit=%errorlevel%"
           type build\wheel-install.jsonl
           if not "%install_exit%"=="0" exit /b %install_exit%
-          python scripts/zernyth_sdk.py --output build/zernyth-sdk-1.0.0.zip
+          python scripts/zernyth_sdk.py --output build/zernyth-sdk-1.0.1.zip
           if errorlevel 1 exit /b %errorlevel%
-          python scripts/zernyth_ci.py bundle --wheel dist/zernyth_engine-1.0.0-cp315-cp315-win_amd64.whl --sdk build/zernyth-sdk-1.0.0.zip --artifact-dir publish-bundle
+          python scripts/zernyth_ci.py bundle --wheel dist/zernyth_engine-1.0.1-cp315-cp315-win_amd64.whl --sdk build/zernyth-sdk-1.0.1.zip --artifact-dir publish-bundle
           exit /b %errorlevel%
       - name: Record the validated wheel digest
         id: wheel_digest
-        run: python scripts/zernyth_ci.py digest --wheel dist/zernyth_engine-1.0.0-cp315-cp315-win_amd64.whl
+        run: python scripts/zernyth_ci.py digest --wheel dist/zernyth_engine-1.0.1-cp315-cp315-win_amd64.whl
       - uses: actions/upload-artifact@v7
         with:
           name: zernyth-windows-${{ inputs.commit }}
@@ -129,6 +134,74 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  linux:
+    if: github.repository == 'MakisImperium/endstone-zernyth' && inputs.validated_run == ''
+    # The self-hosted runner provides Clang 20/libc++ 20, JDK 25, Conan caches with the reviewed Linux recipes,
+    # patchelf, CONAN_HOME, ZERNYTH_BUILD_PATH_ROOT and a CPython 3.15 wheelhouse in ZERNYTH_WHEELHOUSE_315.
+    runs-on: [self-hosted, zernyth-linux-temurin25]
+    timeout-minutes: 120
+    outputs:
+      wheel-sha256: ${{ steps.linux_digest.outputs.sha256 }}
+    env:
+      RELEASE_COMMIT: ${{ inputs.commit }}
+      RELEASE_TARGET: ${{ inputs.target }}
+      BDS_SHA256: ${{ inputs.linux_bds_sha256 }}
+      WHEEL: zernyth_engine-1.0.1-cp315-cp315-manylinux_2_39_x86_64.whl
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Validate inputs and runner prerequisites
+        run: |
+          [[ $RELEASE_COMMIT =~ ^[0-9a-f]{40}$ ]] || { echo 'Provide the reviewed full release commit SHA.'; exit 1; }
+          [[ $BDS_SHA256 =~ ^[0-9a-f]{64}$ ]] || { echo 'Provide linux_bds_sha256 (sha256sum bedrock_server of the validated BDS 1.26.60.6).'; exit 1; }
+          for name in CONAN_HOME ZERNYTH_BUILD_PATH_ROOT ZERNYTH_WHEELHOUSE_315; do
+            [[ -n ${!name:-} ]] || { echo "The runner must set $name."; exit 1; }
+          done
+          command -v patchelf >/dev/null || { echo 'The runner needs patchelf for auditwheel.'; exit 1; }
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.15.2'
+          architecture: x64
+      - name: Install build tools from the runner wheelhouse
+        run: python -m pip install --no-index --find-links "$ZERNYTH_WHEELHOUSE_315" packaging auditwheel
+      - name: Verify exact release commit and production tag
+        run: python scripts/zernyth_wheel.py release-ref
+      - name: Build matching native and Java components using offline caches
+        run: |
+          python scripts/zernyth_release.py build --linux-release --lockfile config/zernyth-linux-conan.lock
+          python scripts/zernyth_release.py test
+      - name: Build the wheel and repair it to manylinux
+        run: |
+          python -m pip wheel --no-build-isolation --no-deps --no-index -Cnative-build-dir=build/RelWithDebInfo \
+            -Cbds-sha256="$BDS_SHA256" --wheel-dir build/linux-raw .
+          # libpython comes from the user's CPython; the JVM is loaded from the selected JDK at runtime.
+          python -m auditwheel repair --plat manylinux_2_39_x86_64 --exclude 'libpython3.15.so*' --exclude 'libjvm.so' \
+            -w dist build/linux-raw/zernyth_engine-1.0.1-cp315-cp315-linux_x86_64.whl
+          test -f "dist/$WHEEL"
+      - name: Install the wheel into a fresh environment
+        run: |
+          python -m venv build/wheel-test
+          build/wheel-test/bin/python -m pip install --no-index --find-links "$ZERNYTH_WHEELHOUSE_315" "dist/$WHEEL"
+          build/wheel-test/bin/python -m pip check
+          build/wheel-test/bin/python -I -c "import endstone._python; import zernyth.cli as c; c.reject_conflicting_distribution()"
+          build/wheel-test/bin/zernyth --version | grep -F 'Zernyth Engine 1.0.1'
+          if [[ -n ${ZERNYTH_TEST_BDS:-} ]]; then build/wheel-test/bin/zernyth --check --server "$ZERNYTH_TEST_BDS"; fi
+      - name: Record the validated wheel digest
+        id: linux_digest
+        run: echo "sha256=$(sha256sum "dist/$WHEEL" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: zernyth-linux-${{ inputs.commit }}
+          path: dist/${{ env.WHEEL }}
+          if-no-files-found: error
+          retention-days: 30
+
   promote:
     if: github.repository == 'MakisImperium/endstone-zernyth' && inputs.validated_run != ''
     runs-on: ubuntu-latest
@@ -138,6 +211,7 @@ jobs:
       actions: read
     outputs:
       wheel-sha256: ${{ steps.verified.outputs.sha256 }}
+      linux-sha256: ${{ steps.linux_verified.outputs.sha256 }}
     env:
       RELEASE_COMMIT: ${{ inputs.commit }}
       RELEASE_TARGET: ${{ inputs.target }}
@@ -165,7 +239,7 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
           if [ "$RELEASE_TARGET" = pypi ]; then
-            test "$(git rev-parse 'refs/tags/v1.0.0^{commit}')" = "$RELEASE_COMMIT"
+            test "$(git rev-parse 'refs/tags/v1.0.1^{commit}')" = "$RELEASE_COMMIT"
           fi
           python scripts/zernyth_ci.py verify-bundle --artifact-dir publish-bundle --validated-run "$VALIDATED_RUN"
       - uses: actions/upload-artifact@v7
@@ -174,10 +248,25 @@ jobs:
           path: publish-bundle/
           if-no-files-found: error
           retention-days: 30
+      - uses: actions/download-artifact@v8
+        with:
+          name: zernyth-linux-${{ inputs.commit }}
+          run-id: ${{ inputs.validated_run }}
+          github-token: ${{ github.token }}
+          path: linux-bundle
+      - name: Record the promoted Linux wheel digest
+        id: linux_verified
+        run: echo "sha256=$(sha256sum linux-bundle/zernyth_engine-1.0.1-cp315-cp315-manylinux_2_39_x86_64.whl | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: zernyth-linux-${{ inputs.commit }}
+          path: linux-bundle/
+          if-no-files-found: error
+          retention-days: 30
 
   testpypi:
-    if: always() && inputs.target == 'testpypi' && github.repository == 'MakisImperium/endstone-zernyth' && (needs.wheel.result == 'success' || needs.promote.result == 'success')
-    needs: [wheel, promote]
+    if: always() && inputs.target == 'testpypi' && github.repository == 'MakisImperium/endstone-zernyth' && ((needs.wheel.result == 'success' && needs.linux.result == 'success') || needs.promote.result == 'success')
+    needs: [wheel, linux, promote]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -194,15 +283,23 @@ jobs:
       - name: Verify the exact validated build artifact
         env:
           EXPECTED_SHA256: ${{ needs.wheel.outputs.wheel-sha256 || needs.promote.outputs.wheel-sha256 }}
-        run: printf '%s  %s\n' "$EXPECTED_SHA256" 'publish-bundle/dist/zernyth_engine-1.0.0-cp315-cp315-win_amd64.whl' | sha256sum --check --strict
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" 'publish-bundle/dist/zernyth_engine-1.0.1-cp315-cp315-win_amd64.whl' | sha256sum --check --strict
+      - uses: actions/download-artifact@v8
+        with:
+          name: zernyth-linux-${{ inputs.commit }}
+          path: publish-bundle/dist
+      - name: Verify the exact validated Linux wheel
+        env:
+          EXPECTED_SHA256: ${{ needs.linux.outputs.wheel-sha256 || needs.promote.outputs.linux-sha256 }}
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" 'publish-bundle/dist/zernyth_engine-1.0.1-cp315-cp315-manylinux_2_39_x86_64.whl' | sha256sum --check --strict
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: publish-bundle/dist/
 
   pypi:
-    if: always() && inputs.target == 'pypi' && github.repository == 'MakisImperium/endstone-zernyth' && (needs.wheel.result == 'success' || needs.promote.result == 'success')
-    needs: [wheel, promote]
+    if: always() && inputs.target == 'pypi' && github.repository == 'MakisImperium/endstone-zernyth' && ((needs.wheel.result == 'success' && needs.linux.result == 'success') || needs.promote.result == 'success')
+    needs: [wheel, linux, promote]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -219,7 +316,15 @@ jobs:
       - name: Verify the exact validated build artifact
         env:
           EXPECTED_SHA256: ${{ needs.wheel.outputs.wheel-sha256 || needs.promote.outputs.wheel-sha256 }}
-        run: printf '%s  %s\n' "$EXPECTED_SHA256" 'publish-bundle/dist/zernyth_engine-1.0.0-cp315-cp315-win_amd64.whl' | sha256sum --check --strict
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" 'publish-bundle/dist/zernyth_engine-1.0.1-cp315-cp315-win_amd64.whl' | sha256sum --check --strict
+      - uses: actions/download-artifact@v8
+        with:
+          name: zernyth-linux-${{ inputs.commit }}
+          path: publish-bundle/dist
+      - name: Verify the exact validated Linux wheel
+        env:
+          EXPECTED_SHA256: ${{ needs.linux.outputs.wheel-sha256 || needs.promote.outputs.linux-sha256 }}
+        run: printf '%s  %s\n' "$EXPECTED_SHA256" 'publish-bundle/dist/zernyth_engine-1.0.1-cp315-cp315-manylinux_2_39_x86_64.whl' | sha256sum --check --strict
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: publish-bundle/dist/

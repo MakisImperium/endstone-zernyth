@@ -6,6 +6,14 @@ based on Endstone 0.11.15. Stable identifies the selected release channel and su
 platform scope. A separate Ubuntu 24.04 x86_64 archive uses CPython 3.12. The evidence
 and limitations below define the validated coverage.
 
+## 1.0.1
+
+1.0.1 adds a Linux x86_64 wheel for CPython 3.15 next to the Windows wheel and a `zernyth` command that finds an
+installed JDK 25, downloads Bedrock Dedicated Server 1.26.60.6 after confirmation and starts the server. The Java API
+is unchanged. The Linux wheel is built with `scripts/zernyth_release.py build --linux-release` on the self-hosted
+`zernyth-linux-temurin25` runner and repaired with `auditwheel` to `manylinux_2_39_x86_64`; libpython and the JVM stay
+external. Its validation status is recorded in the 1.0.1 release run; until then treat it as NOT TESTED.
+
 ## Release contents
 
 - Matching native components, Java API and Java runtime versioned 1.0.0.

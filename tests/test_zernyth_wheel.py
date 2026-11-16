@@ -49,7 +49,7 @@ class WheelTests(unittest.TestCase):
         metadata = BytesParser().parsebytes(BACKEND.metadata_bytes())
         Metadata.from_email(BACKEND.metadata_bytes(), validate=True)
         self.assertEqual(metadata["Name"], "zernyth-engine")
-        self.assertEqual(metadata["Version"], "1.0.0")
+        self.assertEqual(metadata["Version"], "1.0.1")
         self.assertIn("Zernyth", BACKEND.metadata_bytes().decode("utf-8"))
         self.assertNotIn("asyncio", metadata.get_all("Requires-Dist"))
 
@@ -70,10 +70,15 @@ class WheelTests(unittest.TestCase):
         self.assertEqual(result["bdsRun"], "NOT TESTED")
         self.assertEqual(result["isolation"], "NOT TESTED")
 
-    def test_no_silent_linux_wheel(self):
-        with patch.object(BACKEND.sys, "platform", "linux"):
-            with self.assertRaisesRegex(RuntimeError, "Windows"):
+    def test_unsupported_platform_builds_no_wheel(self):
+        with patch.object(BACKEND.sysconfig, "get_platform", return_value="macosx-14.0-arm64"):
+            with self.assertRaisesRegex(RuntimeError, "Windows x64 and Linux x86_64"):
                 BACKEND.build_wheel("unused")
+
+    def test_linux_wheel_requires_audited_bds_hash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "BDS executable SHA-256"):
+                BACKEND.linux_payload(Path(directory), Path(directory), {}, {})
 
     def test_traversal_rejected(self):
         self.reject_archive(["../outside"], "Unsafe")
@@ -165,7 +170,7 @@ class WheelTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             server = Path(directory) / "bedrock_server"
             bootstrap, modules = self._fake_bootstrap(server)
-            with modules, patch.object(cli.os, "name", "nt"), patch.object(cli, "reject_conflicting_distribution"), \
+            with modules, patch.object(cli, "WINDOWS", True), patch.object(cli, "reject_conflicting_distribution"), \
                     patch.object(cli, "get_version", return_value="1.0.0"), \
                     patch.object(cli, "_java_runtime", return_value=Path(directory) / "jvm.dll"), \
                     patch.object(cli.sys.stdin, "isatty", return_value=False), \
@@ -177,9 +182,18 @@ class WheelTests(unittest.TestCase):
             self.assertEqual(bootstrap.downloads, [])
             self.assertIn("--yes", error.getvalue())
 
+    def test_linux_bds_must_match_the_validated_hash(self):
+        from zernyth import cli
+        with tempfile.TemporaryDirectory() as directory, patch.object(cli, "WINDOWS", False):
+            (Path(directory) / "bedrock_server").write_bytes(b"bds")
+            digest = hashlib.sha256(b"bds").hexdigest()
+            self.assertTrue(cli.check_bds(directory, {"bds": "1.26.60.6", "bdsSha256": digest})[0])
+            self.assertFalse(cli.check_bds(directory, {"bds": "1.26.60.6", "bdsSha256": "0" * 64})[0])
+            self.assertFalse(cli.check_bds(directory, {"bds": "1.26.60.6"})[0])
+
     def test_cli_reports_missing_jdk_with_install_hint(self):
         from zernyth import cli
-        with patch.object(cli.os, "name", "nt"), patch.object(cli, "reject_conflicting_distribution"), \
+        with patch.object(cli, "WINDOWS", True), patch.object(cli, "reject_conflicting_distribution"), \
                 patch.object(cli, "get_version", return_value="1.0.0"), \
                 patch.object(cli, "find_java_home", return_value=None), \
                 patch("sys.stderr", new_callable=io.StringIO) as error:
@@ -229,12 +243,20 @@ class WheelTests(unittest.TestCase):
             self.assertEqual(job["environment"]["name"], name)
             self.assertEqual(job["permissions"]["id-token"], "write")
             self.assertEqual(job["runs-on"], "ubuntu-latest")
-            self.assertEqual(job["needs"], ["wheel", "promote"])
+            self.assertEqual(job["needs"], ["wheel", "linux", "promote"])
             self.assertFalse(any("checkout" in step.get("uses", "") for step in job["steps"]))
             publisher = job["steps"][-1]
             self.assertNotIn("password", publisher.get("with", {}))
         self.assertEqual(data["jobs"]["testpypi"]["steps"][-1]["with"]["repository-url"],
                          "https://test.pypi.org/legacy/")
+        linux = data["jobs"]["linux"]
+        self.assertNotIn("permissions", linux)
+        self.assertEqual(linux["runs-on"], ["self-hosted", "zernyth-linux-temurin25"])
+        self.assertIn("[0-9a-f]{40}", linux["steps"][0]["run"])
+        self.assertIn("[0-9a-f]{64}", linux["steps"][0]["run"])
+        self.assertIn("actions/checkout", linux["steps"][1]["uses"])
+        linux_build = next(step["run"] for step in linux["steps"] if step.get("name", "").startswith("Build matching"))
+        self.assertIn("--linux-release", linux_build)
         promotion = data["jobs"]["promote"]
         self.assertNotIn("id-token", promotion["permissions"])
         self.assertEqual(promotion["permissions"]["actions"], "read")

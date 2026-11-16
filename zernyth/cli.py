@@ -5,10 +5,12 @@ there after confirmation if it is missing, finds an installed JDK 25 and starts 
 """
 
 import argparse
+import hashlib
 from importlib import metadata
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import subprocess
@@ -17,7 +19,10 @@ import sys
 from . import get_version
 
 EULA = "https://www.minecraft.net/eula"
-JDK_HINT = "Install a JDK 25, for example: winget install EclipseAdoptium.Temurin.25.JDK"
+REMOTE = "https://raw.githubusercontent.com/EndstoneMC/bedrock-server-data/v2"
+WINDOWS = os.name == "nt"
+JDK_HINT = ("Install a JDK 25, for example: winget install EclipseAdoptium.Temurin.25.JDK" if WINDOWS else
+            "Install a JDK 25, for example Eclipse Temurin 25: https://adoptium.net/installation/linux/")
 
 
 def reject_conflicting_distribution():
@@ -35,11 +40,11 @@ def _java_runtime(home):
     env = os.environ.copy()
     for key in ("JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS"):
         env.pop(key, None)
-    probe = subprocess.run([str(home / "bin/java.exe"), "-version"], capture_output=True,
-                           text=True, timeout=15, check=True, env=env)
+    java = home / ("bin/java.exe" if WINDOWS else "bin/java")
+    probe = subprocess.run([str(java), "-version"], capture_output=True, text=True, timeout=15, check=True, env=env)
     if not re.search(r'version "25[.\"]', probe.stdout + probe.stderr):
         raise ValueError("JDK 25 is required")
-    jvm = home / "bin/server/jvm.dll"
+    jvm = home / ("bin/server/jvm.dll" if WINDOWS else "lib/server/libjvm.so")
     if not jvm.is_file():
         raise ValueError("Missing JDK 25 JVM library")
     return jvm
@@ -51,9 +56,14 @@ def _java_candidates():
     java = shutil.which("java")
     if java:
         yield Path(java).resolve().parent.parent
-    for root in {os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("ProgramW6432", r"C:\Program Files")}:
-        for pattern in ("Eclipse Adoptium/jdk-25*", "Java/jdk-25*", "Microsoft/jdk-25*", "Amazon Corretto/jdk25*",
-                        "Zulu/zulu-25*", "BellSoft/LibericaJDK-25*"):
+    if WINDOWS:
+        roots = {os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("ProgramW6432", r"C:\Program Files")}
+        patterns = ("Eclipse Adoptium/jdk-25*", "Java/jdk-25*", "Microsoft/jdk-25*", "Amazon Corretto/jdk25*",
+                    "Zulu/zulu-25*", "BellSoft/LibericaJDK-25*")
+    else:
+        roots, patterns = {"/usr/lib/jvm", "/opt"}, ("*25*", "java/*25*")
+    for root in roots:
+        for pattern in patterns:
             yield from sorted(Path(root).glob(pattern), reverse=True)
 
 
@@ -76,6 +86,43 @@ def _confirm(question, assume_yes):
     return input(question + " [Y/n] ").strip().lower() in ("", "y", "yes", "j", "ja")
 
 
+def _bootstrap_class():
+    if WINDOWS:
+        from endstone.cli.windows import WindowsBootstrap
+
+        class Server(WindowsBootstrap):
+            def _add_loopback_exemption(self):
+                # The upstream launch method calls this hook; Zernyth changes no OS policy.
+                pass
+
+        return Server
+
+    from endstone.cli.linux import LinuxBootstrap
+
+    class Server(LinuxBootstrap):
+        @property
+        def _endstone_runtime_env(self):
+            env = super()._endstone_runtime_env
+            # The validated Linux start uses the system allocator, not the bundled mimalloc.
+            env["LD_PRELOAD"] = "libc.so.6:" + str(self._endstone_runtime_path)
+            return env
+
+    return Server
+
+
+def check_bds(server, build):
+    """Windows reads the file version; Linux compares the validated executable hash."""
+    if WINDOWS:
+        from .bds import inspect
+        result = inspect(server)
+        return result["binaryInspection"] == "PASS", result
+    executable = Path(server) / "bedrock_server"
+    with executable.open("rb") as stream:
+        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+    expected = build.get("bdsSha256", "")
+    return digest == expected, {"expectedVersion": build.get("bds"), "sha256": digest, "expectedSha256": expected}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="zernyth", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -88,8 +135,8 @@ def main(argv=None):
     parser.add_argument("--run", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     reject_conflicting_distribution()
-    if os.name != "nt":
-        parser.error("This release wheel is supported only on Windows x64; on Ubuntu use zernyth-install.sh")
+    if not (WINDOWS or (sys.platform == "linux" and platform.machine() == "x86_64")):
+        parser.error("Zernyth supports Windows x64 and Linux x86_64")
     home = args.java_home.resolve() if args.java_home else find_java_home()
     if home is None:
         parser.error("No JDK 25 found. " + JDK_HINT)
@@ -99,16 +146,8 @@ def main(argv=None):
         parser.error(f"{home}: {error}. {JDK_HINT}")
     print(f"Java: {home}")
 
-    from endstone.cli.windows import WindowsBootstrap
-
-    class ExistingServer(WindowsBootstrap):
-        def _add_loopback_exemption(self):
-            # The upstream launch method calls this hook; Zernyth changes no OS policy.
-            pass
-
     server = args.server.resolve()
-    backend = ExistingServer(server_folder=str(server), no_confirm=args.yes, remote=
-                             "https://raw.githubusercontent.com/EndstoneMC/bedrock-server-data/v2", interactive=False)
+    backend = _bootstrap_class()(server_folder=str(server), no_confirm=args.yes, remote=REMOTE, interactive=False)
     if not backend.executable_path.exists():
         if args.check:
             parser.error(f"No Bedrock Dedicated Server in {server}")
@@ -119,14 +158,13 @@ def main(argv=None):
         server.mkdir(parents=True, exist_ok=True)
         backend._download(server)
 
-    from .bds import inspect
-    result = inspect(server)
-    print(json.dumps(result, indent=2))
-    if result["binaryInspection"] != "PASS":
-        parser.error(f"Zernyth {get_version()} needs Bedrock Dedicated Server {result['expectedVersion']}; "
-                     f"found {result['fileVersion']}")
     package = Path(__file__).resolve().parent
     build = json.loads((package / "BUILD.json").read_text(encoding="utf-8"))
+    compatible, result = check_bds(server, build)
+    print(json.dumps(result, indent=2))
+    if not compatible:
+        parser.error(f"Zernyth {get_version()} needs Bedrock Dedicated Server {result['expectedVersion']}; "
+                     f"the server in {server} is a different build")
     jars = [package / "java" / f"{name}-{build['zernyth']}.jar" for name in ("api", "runtime")]
     if not all(p.is_file() for p in jars):
         parser.error("Incomplete Java runtime installation")
@@ -136,5 +174,6 @@ def main(argv=None):
     os.environ.update(JAVA_HOME=str(home), ZERNYTH_JAVA_ENABLED="1",
                       ZERNYTH_JVM_LIBRARY=str(jvm),
                       ZERNYTH_JAVA_CLASSPATH=os.pathsep.join(map(str, jars)))
+    server.joinpath("plugins").mkdir(exist_ok=True)
     backend._validate()
     raise SystemExit(backend._run())

@@ -5,7 +5,7 @@ backend-path = ["packaging"]
 
 [project]
 name = "zernyth-engine"
-version = "1.0.0"
+version = "1.0.1"
 authors = [{ name = "Vincent Wu", email = "magicdroidx@gmail.com" }]
 description = "Java 25 plugin framework integrated into Endstone and the original Bedrock Dedicated Server."
 readme = "packaging/README.md"

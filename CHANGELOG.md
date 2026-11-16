@@ -1,15 +1,17 @@
 # Zernyth Engine changelog
 
-## Unreleased
+## 1.0.1 - prepared 2026-11-16
 
 ### Added
 
+- Linux x86_64 wheel on PyPI for CPython 3.15 (`manylinux_2_39`), so `pip install zernyth-engine` works on Ubuntu 24.04 and newer.
 - Linux installer `zernyth-install.sh` with `install`, `update`, `rollback` and a `zernyth` command.
 
 ### Changed
 
 - `zernyth` without options finds JDK 25, downloads Bedrock Dedicated Server into `./bedrock_server` after confirmation and starts the server.
 - `zernyth --check` only checks BDS and Java; `--run` is no longer needed.
+- `zernyth` runs on Linux with the validated system allocator and checks the BDS executable against its audited SHA-256.
 
 ## 1.0.0 - prepared 2026-11-16
 

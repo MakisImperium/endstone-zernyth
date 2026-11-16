@@ -64,7 +64,7 @@ def install():
                         str(ROOT / "requirements.lock")], env=env, check=True, timeout=180)
         env.pop("PYTHONPATH", None)
         subprocess.run([str(python), "-m", "pip", "check"], env=env, check=True, timeout=30)
-        (environment / ".zernyth-install-complete").write_text("1.0.0\n")
+        (environment / ".zernyth-install-complete").write_text("1.0.1\n")
     except BaseException:
         shutil.rmtree(environment)
         raise
